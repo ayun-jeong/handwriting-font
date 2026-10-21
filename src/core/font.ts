@@ -2,7 +2,8 @@
 import { Font, woff2 } from 'fonteditor-core'
 import * as opentypeNs from 'opentype.js'
 import type { Pt } from './geometry.ts'
-import type { LaidGlyph, Settings } from './layout.ts'
+import type { FontGlyph } from './glyphset.ts'
+import type { Settings } from './layout.ts'
 import { buildNameTable, replaceTables } from './sfnt.ts'
 import type { Cubic, Outline } from './tracer.ts'
 
@@ -93,7 +94,7 @@ function nameTable(meta: FontMeta): Uint8Array {
   })
 }
 
-function vertical(glyphs: LaidGlyph[]) {
+function vertical(glyphs: FontGlyph[]) {
   let top = ASC, bottom = DESC
   for (const g of glyphs) { top = Math.max(top, g.bounds[3]); bottom = Math.min(bottom, g.bounds[1]) }
   return { winAscent: Math.ceil(top), winDescent: Math.ceil(-bottom) }
@@ -105,7 +106,7 @@ const OS2_RANGES = {
   ulCodePageRange1: (1 << 0) | (1 << 19), // Latin 1, Korean Wansung
 }
 
-export function buildTTF(glyphs: LaidGlyph[], meta: FontMeta): Uint8Array {
+export function buildTTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
   const font = Font.create()
   const ttf = font.get() as any
   const notdef = ttf.glyf[0]
@@ -120,17 +121,37 @@ export function buildTTF(glyphs: LaidGlyph[], meta: FontMeta): Uint8Array {
     usWinAscent: winAscent, usWinDescent: winDescent, ...OS2_RANGES,
   })
   ttf.post.format = 3
+  const index = new Map<string, number>()
+  glyphs.forEach((g, i) => index.set(g.name, i + 2))
+  const box = new Map<string, [number, number, number, number]>()
+  const simple = glyphs.map((g) => {
+    if (g.type !== 'simple') return null
+    const contours = ttContours(g.outlines)
+    const xs = contours.flat().map((p) => p.x), ys = contours.flat().map((p) => p.y)
+    const b: [number, number, number, number] = xs.length ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] : [0, 0, 0, 0]
+    box.set(g.name, b)
+    return { contours, b }
+  })
   ttf.glyf = [
     { ...notdef, name: '.notdef' },
     { contours: [], advanceWidth: meta.settings.space, leftSideBearing: 0, xMin: 0, xMax: 0, yMin: 0, yMax: 0, name: 'space', unicode: [32] },
-    ...glyphs.map((g) => {
-      const contours = ttContours(g.outlines)
-      const xs = contours.flat().map((p) => p.x), ys = contours.flat().map((p) => p.y)
-      const xMin = Math.min(...xs)
+    ...glyphs.map((g, i) => {
+      if (g.type === 'simple') {
+        const { contours, b } = simple[i]!
+        return {
+          contours, advanceWidth: g.advance, leftSideBearing: b[0], xMin: b[0], yMin: b[1], xMax: b[2], yMax: b[3],
+          name: g.name, unicode: g.unicode === undefined ? [] : [g.unicode],
+        }
+      }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+      for (const c of g.components) {
+        const b = box.get(c.name)!
+        x0 = Math.min(x0, b[0] + c.dx); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2] + c.dx); y1 = Math.max(y1, b[3])
+      }
       return {
-        contours, advanceWidth: g.advance, leftSideBearing: xMin,
-        xMin, xMax: Math.max(...xs), yMin: Math.min(...ys), yMax: Math.max(...ys),
-        name: `uni${g.char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`, unicode: [g.char.codePointAt(0)!],
+        compound: true,
+        glyfs: g.components.map((c) => ({ glyphIndex: index.get(c.name)!, transform: { a: 1, b: 0, c: 0, d: 1, e: c.dx, f: 0 } })),
+        advanceWidth: g.advance, leftSideBearing: x0, xMin: x0, yMin: y0, xMax: x1, yMax: y1, name: g.name, unicode: [g.unicode],
       }
     }),
   ]
@@ -139,31 +160,37 @@ export function buildTTF(glyphs: LaidGlyph[], meta: FontMeta): Uint8Array {
   return replaceTables(raw, { name: nameTable(meta) })
 }
 
-export function buildOTF(glyphs: LaidGlyph[], meta: FontMeta): Uint8Array {
+/** OTF (CFF) has no composite glyphs, so assembled syllables are flattened. */
+export function buildOTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
   const { ascii, ps } = psName(meta.family)
   const nd = new OTPath()
   nd.moveTo(50, 0); nd.lineTo(450, 0); nd.lineTo(450, 700); nd.lineTo(50, 700); nd.close()
   nd.moveTo(100, 50); nd.lineTo(100, 650); nd.lineTo(400, 650); nd.lineTo(400, 50); nd.close()
+  const byName = new Map(glyphs.map((g) => [g.name, g]))
+  const draw = (path: any, outlines: Outline[], dx = 0) => {
+    for (const o of orient(outlines, true)) {
+      path.moveTo(o.segs[0][0][0] + dx, o.segs[0][0][1])
+      for (const [, c1, c2, p] of o.segs) path.curveTo(c1[0] + dx, c1[1], c2[0] + dx, c2[1], p[0] + dx, p[1])
+      path.close()
+    }
+  }
   const list = [
     new OTGlyph({ name: '.notdef', advanceWidth: 500, path: nd }),
     new OTGlyph({ name: 'space', unicode: 32, advanceWidth: meta.settings.space, path: new OTPath() }),
-    ...glyphs.map((g) => {
-      const path = new OTPath()
-      for (const o of orient(g.outlines, true)) {
-        path.moveTo(o.segs[0][0][0], o.segs[0][0][1])
-        for (const [, c1, c2, p] of o.segs) path.curveTo(c1[0], c1[1], c2[0], c2[1], p[0], p[1])
-        path.close()
-      }
-      return new OTGlyph({ name: `uni${g.char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`, unicode: g.char.codePointAt(0)!, advanceWidth: g.advance, path })
-    }),
   ]
+  for (const g of glyphs) {
+    if (g.unicode === undefined) continue // jamo variants live inside the flattened syllables
+    const path = new OTPath()
+    if (g.type === 'simple') draw(path, g.outlines)
+    else for (const c of g.components) draw(path, (byName.get(c.name) as { outlines: Outline[] }).outlines, c.dx)
+    list.push(new OTGlyph({ name: g.name, unicode: g.unicode, advanceWidth: g.advance, path }))
+  }
   const f = new OTFont({ familyName: ascii, styleName: 'Regular', postScriptName: ps, unitsPerEm: 1000, ascender: ASC, descender: DESC, glyphs: list } as any)
   const { winAscent, winDescent } = vertical(glyphs)
   ;(f as any).tables.os2 = {
     fsType: meta.embedding === 'installable' ? 0 : 8, fsSelection: 64 | 128,
     sTypoLineGap: meta.settings.lineGap, usWinAscent: winAscent, usWinDescent: winDescent, ...OS2_RANGES,
   }
-  ;(f as any).tables.hhea = { lineGap: meta.settings.lineGap }
   const raw = new Uint8Array(f.toArrayBuffer())
   return replaceTables(raw, { name: nameTable(meta) })
 }

@@ -25,12 +25,12 @@ export type Project = {
   embedding: Embedding
   /** Weight the stored outlines were traced at. */
   tracedWeight: number
-  /** Scripts whose size was already auto-fitted (done once, so later photos don't undo the user's choice). */
-  fitted: { hangul: boolean; latin: boolean }
+  /** Automatic sizing already done (once each, so later photos don't undo the user's choices). */
+  fitted: { hangul: 'none' | 'composed' | 'written'; latin: boolean; composed: boolean }
 }
 
 export function emptyProject(): Project {
-  return { version: 1, glyphs: {}, settings: { ...DEFAULT_SETTINGS }, adjust: {}, fontName: '내 손글씨', embedding: 'editable', tracedWeight: 0, fitted: { hangul: false, latin: false } }
+  return { version: 1, glyphs: {}, settings: { ...DEFAULT_SETTINGS }, adjust: {}, fontName: '내 손글씨', embedding: 'editable', tracedWeight: 0, fitted: { hangul: 'none', latin: false, composed: false } }
 }
 
 const KEY = 'handwriting-font/project-v1'
@@ -39,7 +39,12 @@ export async function loadProject(): Promise<Project | null> {
   try {
     const p = (await get(KEY)) as Project | undefined
     if (p?.version !== 1) return null
-    return { ...emptyProject(), ...p, settings: { ...DEFAULT_SETTINGS, ...p.settings } }
+    const f = (p as { fitted?: { hangul?: unknown; latin?: boolean; composed?: boolean } }).fitted
+    const fitted: Project['fitted'] = {
+      hangul: f?.hangul === true ? 'written' : f?.hangul === 'composed' || f?.hangul === 'written' ? f.hangul : 'none',
+      latin: !!f?.latin, composed: !!f?.composed,
+    }
+    return { ...emptyProject(), ...p, settings: { ...DEFAULT_SETTINGS, ...p.settings }, fitted }
   } catch {
     return null
   }

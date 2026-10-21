@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { BOX, CROP, INSET, KIND } from '../core/geometry.ts'
-import { NO_ADJUST, layoutGlyph, svgPath, type GlyphAdjust, type Settings } from '../core/layout.ts'
+import { examplesFor, isJamoKey, jamoLabel } from '../core/compose.ts'
+import { NO_ADJUST, type GlyphAdjust, type Settings } from '../core/layout.ts'
+import GlyphTile from './GlyphTile.tsx'
 import type { GlyphRec } from '../project.ts'
 
 type Props = {
@@ -57,7 +59,8 @@ export default function GlyphEditor({ glyph, order, settings, adjust, family, on
     return () => window.removeEventListener('keydown', onKey)
   }, [prev, next, onClose, onGo])
 
-  const laid = layoutGlyph(glyph, settings, adjust)
+  const jamo = isJamoKey(glyph.char)
+  const label = jamo ? jamoLabel(glyph.char) : glyph.char
   const set = (p: Partial<GlyphAdjust>) => onChange({ ...adjust, ...p })
   const sliders: { key: 'dx' | 'dy' | 'scale'; label: string; min: number; max: number; step: number; fmt: (v: number) => string }[] = [
     { key: 'dx', label: '좌우 위치', min: -200, max: 200, step: 5, fmt: (v) => (v > 0 ? `+${v}` : String(v)) },
@@ -69,7 +72,7 @@ export default function GlyphEditor({ glyph, order, settings, adjust, family, on
     <div className="overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="ge-h" tabIndex={-1} ref={dialog}>
         <div className="dialog-head">
-          <h3 id="ge-h">‘{glyph.char}’ 고치기</h3>
+          <h3 id="ge-h">‘{label}’ 고치기</h3>
           <div className="dialog-nav">
             <button type="button" className="ghost" disabled={!prev} onClick={() => prev && onGo(prev)} aria-label="이전 글자">‹</button>
             <span className="hint">{at + 1} / {order.length}</span>
@@ -84,17 +87,13 @@ export default function GlyphEditor({ glyph, order, settings, adjust, family, on
             <figcaption>사진 속 칸과 따낸 윤곽(파란 선)</figcaption>
           </figure>
           <figure>
-            <svg viewBox={`${laid.advance / 2 - 520} -950 1040 1300`} className="crop result" aria-label="폰트에 들어갈 모양">
-              <line x1={laid.advance / 2 - 520} x2={laid.advance / 2 + 520} y1={0} y2={0} className="baseline" />
-              <rect x={0} y={-950} width={laid.advance} height={1300} className="advance" />
-              <path d={svgPath(laid.outlines)} />
-            </svg>
-            <figcaption>폰트에 들어갈 모양(회색 띠 = 글자 폭)</figcaption>
+            <GlyphTile glyph={glyph} settings={settings} adjust={adjust} className="crop result" />
+            <figcaption>{jamo ? '조합에 쓰일 모양(연한 부분 = 나머지 자모 자리)' : '폰트에 들어갈 모양(옅은 띠 = 글자 폭)'}</figcaption>
           </figure>
         </div>
 
         <p className="in-context" style={{ fontFamily: family ? `"${family}", var(--font-ui)` : undefined }}>
-          {prev ?? ''}{glyph.char}{next ?? ''} {glyph.char}{glyph.char}{glyph.char}
+          {jamo ? examplesFor(glyph.char).join(' ') : `${prev ?? ''}${glyph.char}${next ?? ''} ${glyph.char}${glyph.char}${glyph.char}`}
         </p>
 
         {sliders.map((it) => (

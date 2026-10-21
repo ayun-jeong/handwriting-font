@@ -1,4 +1,5 @@
 import syllables from './data/syllables.json' with { type: 'json' }
+import { JAMO_PAGES } from './compose.ts'
 import { CELLS, type Kind } from './geometry.ts'
 
 export type PageDef = {
@@ -21,6 +22,15 @@ export function latinPage(): PageDef {
   return { id: `${TEMPLATE_VERSION}|L`, kind: 'latin', title: '영문·숫자·기호', chars: LATIN }
 }
 
+/** Jamo pages: 1 = syllables without a final consonant, 2 = with a final consonant and the finals. */
+export function jamoPage(n: 1 | 2): PageDef {
+  return {
+    id: `${TEMPLATE_VERSION}|J${n}`, kind: 'hangul',
+    title: n === 1 ? '자모 1 · 받침 없는 글자' : '자모 2 · 받침 있는 글자',
+    chars: n === 1 ? JAMO_PAGES.J1 : JAMO_PAGES.J2,
+  }
+}
+
 /** n-th page (1-based) of Hangul syllables, most frequent first. */
 export function koreanPage(n: number): PageDef {
   const chars = [...syllables.ranked].slice((n - 1) * CELLS, n * CELLS)
@@ -29,10 +39,11 @@ export function koreanPage(n: number): PageDef {
 
 export function pageFromQr(text: string): PageDef | null {
   const t = text.trim()
-  const m = /^HF1\|(L|K(\d{1,2}))$/.exec(t)
+  const m = /^HF1\|(L|J([12])|K(\d{1,2}))$/.exec(t)
   if (m) {
     if (m[1] === 'L') return latinPage()
-    const n = Number(m[2])
+    if (m[2]) return jamoPage(Number(m[2]) as 1 | 2)
+    const n = Number(m[3])
     return n >= 1 && n <= KOREAN_PAGES ? koreanPage(n) : null
   }
   const legacy = /^HWF1;P=(\d);N=2;S=spike-v1$/.exec(t)
@@ -51,3 +62,13 @@ export function koreanCoverage(pages: number): number {
 }
 
 export const FREQUENCY_SOURCE = syllables.source
+
+export type Preset = { id: 'quick' | 'standard' | 'careful' | 'master'; name: string; korean: number; note: string }
+
+/** Template sets. Every preset includes both jamo pages, so all 11,172 syllables can be assembled. */
+export const PRESETS: Preset[] = [
+  { id: 'quick', name: '빠른', korean: 0, note: '자모만 써서 모든 글자를 조합' },
+  { id: 'standard', name: '표준', korean: 3, note: '자주 쓰는 240자는 직접' },
+  { id: 'careful', name: '정성', korean: 6, note: '자주 쓰는 480자는 직접' },
+  { id: 'master', name: '장인', korean: 13, note: '자주 쓰는 1,040자는 직접' },
+]

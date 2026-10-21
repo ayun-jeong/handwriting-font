@@ -17,10 +17,14 @@ export type Settings = {
   weight: number
   /** Extra space between lines. */
   lineGap: number
+  /** Assembled syllables relative to written ones (matched automatically, adjustable). */
+  composedScale: number
+  composedShift: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   tracking: 0, space: 280, hangulScale: 1, latinScale: 1, hangulShift: 0, latinShift: 0, weight: 0, lineGap: 200,
+  composedScale: 1, composedShift: 0,
 }
 
 export type GlyphAdjust = { dx: number; dy: number; scale: number; off: boolean }
@@ -74,13 +78,8 @@ export function svgPath(outlines: Outline[]): string {
  * Scales that bring a fresh set of glyphs to a typical size: Hangul about 720 units tall, Latin capitals
  * about 700 units. Each script is fitted once, as soon as it has enough glyphs to measure.
  */
-export function autoFit(glyphs: GlyphShape[]): Partial<Pick<Settings, 'hangulScale' | 'latinScale'>> {
-  const med = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)]
-  const fit = (target: number, heights: number[]) => Math.round(Math.min(1.5, Math.max(0.8, target / med(heights))) * 100) / 100
-  const hangul = glyphs.filter((g) => g.kind === 'hangul').map((g) => { const b = bounds(g.outlines); return b[3] - b[1] })
-  const caps = glyphs.filter((g) => /^[A-Z]$/.test(g.char)).map((g) => bounds(g.outlines)[3])
-  const out: Partial<Pick<Settings, 'hangulScale' | 'latinScale'>> = {}
-  if (hangul.length >= 8) out.hangulScale = fit(720, hangul)
-  if (caps.length >= 8) out.latinScale = fit(700, caps)
-  return out
+export function fitScale(target: number, heights: number[]): number {
+  const v = [...heights].sort((a, b) => a - b)[Math.floor(heights.length / 2)]
+  return Math.round(Math.min(1.5, Math.max(0.8, target / v)) * 100) / 100
 }
+

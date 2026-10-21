@@ -1,16 +1,21 @@
 import { useMemo, useState } from 'react'
-import type { Update } from '../App.tsx'
-import { DEFAULT_SETTINGS, NO_ADJUST, layoutGlyph, svgPath, type Settings } from '../core/layout.ts'
-import type { Project } from '../project.ts'
-import { sampleText } from '../sampleText.ts'
+import type { Counts, Update } from '../App.tsx'
+import { isJamoKey, jamoLabel } from '../core/compose.ts'
+import { DEFAULT_SETTINGS, NO_ADJUST, type Settings } from '../core/layout.ts'
+import type { GlyphRec, Project } from '../project.ts'
 import GlyphEditor from './GlyphEditor.tsx'
+import GlyphTile from './GlyphTile.tsx'
 
 type Props = {
   project: Project
   update: Update
   family: string | null
   building: boolean
-  counts: { hangul: number; latin: number; total: number }
+  counts: Counts
+  written: Set<string>
+  composable: Set<string>
+  text: string
+  setText: (t: string) => void
   onAdd: () => void
   onNext: () => void
 }
@@ -41,6 +46,14 @@ const GROUPS: { title: string; note?: string; items: SliderDef[] }[] = [
     ],
   },
   {
+    title: '조합한 한글',
+    note: '자모로 만든 글자를 직접 쓴 글자와 맞춰요. 처음엔 같은 글자끼리 비교해 자동으로 맞춰 둬요.',
+    items: [
+      { key: 'composedScale', label: '크기', min: 0.6, max: 1.6, step: 0.01, fmt: pct },
+      { key: 'composedShift', label: '높이', min: -200, max: 200, step: 5, fmt: signed },
+    ],
+  },
+  {
     title: '영문·숫자·기호',
     note: '한글과 나란히 쓸 때 높이와 크기를 맞춰 주세요.',
     items: [
@@ -50,37 +63,41 @@ const GROUPS: { title: string; note?: string; items: SliderDef[] }[] = [
   },
 ]
 
-type Filter = 'all' | 'hangul' | 'latin' | 'off'
+type Filter = 'all' | 'hangul' | 'jamo' | 'latin' | 'off'
 
-export default function AdjustStep({ project, update, family, building, counts, onAdd, onNext }: Props) {
-  const have = useMemo(() => new Set(Object.keys(project.glyphs)), [project.glyphs])
-  const [text, setText] = useState(() => sampleText(have))
+export default function AdjustStep({ project, update, family, building, counts, written, composable, text, setText, onAdd, onNext }: Props) {
   const [size, setSize] = useState(40)
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<string | null>(null)
+  const [showComposed, setShowComposed] = useState(false)
 
-  const missing = useMemo(() => [...new Set([...text].filter((c) => c.trim() && !have.has(c)))], [text, have])
-  // runs of characters we have (drawn in the live font) and don't have (drawn grey in the system font)
+  // runs of characters: written by hand, assembled from jamo, or missing (drawn grey in the system font)
   const runs = useMemo(() => {
-    const out: { have: boolean; text: string }[] = []
+    const out: { kind: 'have' | 'comp' | 'miss'; text: string }[] = []
     for (const c of text) {
-      const ok = !c.trim() || have.has(c)
+      const kind = !c.trim() || written.has(c) ? 'have' : composable.has(c) ? 'comp' : 'miss'
       const last = out[out.length - 1]
-      if (last && last.have === ok) last.text += c
-      else out.push({ have: ok, text: c })
+      if (last && last.kind === kind) last.text += c
+      else out.push({ kind, text: c })
     }
     return out
-  }, [text, have])
+  }, [text, written, composable])
+  const missing = useMemo(() => [...new Set([...text].filter((c) => c.trim() && !written.has(c) && !composable.has(c)))], [text, written, composable])
+  const composedHere = useMemo(() => new Set([...text].filter((c) => composable.has(c))).size, [text, composable])
+
   const s = project.settings
   const setSetting = (key: keyof Settings, v: number) => update((p) => ({ ...p, settings: { ...p.settings, [key]: v } }))
 
   const list = useMemo(() => {
-    const all = Object.values(project.glyphs).sort((a, b) => (a.kind === b.kind ? a.char.localeCompare(b.char, 'ko') : a.kind === 'hangul' ? -1 : 1))
+    const order = (g: GlyphRec) => (isJamoKey(g.char) ? 1 : g.kind === 'hangul' ? 0 : 2)
+    const all = Object.values(project.glyphs).sort((a, b) => order(a) - order(b) || (isJamoKey(a.char) ? 0 : a.char.localeCompare(b.char, 'ko')))
     return all.filter((g) => {
       const off = project.adjust[g.char]?.off
       if (filter === 'off') return off
       if (filter === 'all') return true
-      return g.kind === filter
+      if (filter === 'jamo') return isJamoKey(g.char)
+      if (filter === 'hangul') return g.kind === 'hangul' && !isJamoKey(g.char)
+      return g.kind === 'latin'
     })
   }, [project.glyphs, project.adjust, filter])
   const offCount = Object.values(project.adjust).filter((a) => a.off).length
@@ -95,6 +112,11 @@ export default function AdjustStep({ project, update, family, building, counts, 
     )
   }
 
+  const chips: [Filter, string][] = [
+    ['all', `전체 ${counts.total}`], ['hangul', `한글 ${counts.hangul}`], ['jamo', `자모 ${counts.jamo}`],
+    ['latin', `영문·기호 ${counts.latin}`], ['off', `뺀 글자 ${offCount}`],
+  ]
+
   return (
     <section className="panel" aria-labelledby="a-h">
       <h2 id="a-h">다듬기</h2>
@@ -104,22 +126,27 @@ export default function AdjustStep({ project, update, family, building, counts, 
         <div className="preview-bar">
           <label htmlFor="preview-size">미리보기 크기</label>
           <input id="preview-size" type="range" min={16} max={96} value={size} onChange={(e) => setSize(Number(e.target.value))} />
+          {composable.size > 0 && (
+            <label className="check small">
+              <input id="show-composed" type="checkbox" checked={showComposed} onChange={(e) => setShowComposed(e.target.checked)} />
+              <span>조합한 글자 색으로 표시</span>
+            </label>
+          )}
           {building && <span className="hint"><span className="spin" aria-hidden="true" /> 반영 중</span>}
         </div>
-        <div className="preview-render" style={{ fontFamily: family ? `"${family}", var(--font-ui)` : undefined, fontSize: size }}>
-          {runs.map((r, i) => <span key={i} className={r.have ? undefined : 'miss'}>{r.text}</span>)}
+        <div className={`preview-render${showComposed ? ' mark' : ''}`} style={{ fontFamily: family ? `"${family}", var(--font-ui)` : undefined, fontSize: size }}>
+          {runs.map((r, i) => <span key={i} className={r.kind === 'have' ? undefined : r.kind}>{r.text}</span>)}
         </div>
         <p className="hint">
-          {missing.length
-            ? <>회색은 아직 없는 글자예요({missing.length}개). 템플릿 다음 쪽을 쓰면 채워져요.</>
-            : '모두 내 글씨예요.'}
+          {composedHere > 0 && <>이 문장의 {composedHere}자는 자모를 조합해 만들었어요{showComposed ? '(파란 글자)' : ''}. </>}
+          {missing.length > 0 ? <>회색 {missing.length}자는 아직 없는 글자예요.</> : '빠진 글자 없이 모두 내 글씨예요.'}
         </p>
         <label htmlFor="preview-text" className="hint">미리보기 문장 바꾸기</label>
         <textarea id="preview-text" className="preview-text" rows={3} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       </div>
 
       <div className="controls">
-        {GROUPS.map((g) => (
+        {GROUPS.filter((g) => g.title !== '조합한 한글' || counts.jamo > 0).map((g) => (
           <fieldset key={g.title} className="card group">
             <legend>{g.title}</legend>
             {g.items.map((it) => (
@@ -139,24 +166,24 @@ export default function AdjustStep({ project, update, family, building, counts, 
 
       <h3>글자 하나씩 고치기</h3>
       <div className="chips" role="tablist" aria-label="글자 거르기">
-        {([['all', `전체 ${counts.total}`], ['hangul', `한글 ${counts.hangul}`], ['latin', `영문·기호 ${counts.latin}`], ['off', `뺀 글자 ${offCount}`]] as [Filter, string][]).map(([k, label]) => (
+        {chips.map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={filter === k} className={`chip${filter === k ? ' on' : ''}`} onClick={() => setFilter(k)}>{label}</button>
         ))}
       </div>
-      <p className="hint">글자를 누르면 위치·크기를 고치거나 폰트에서 뺄 수 있어요. 마음에 안 드는 글자는 템플릿 그 쪽만 다시 써서 올리면 새 글씨로 바뀌어요.</p>
+      <p className="hint">
+        글자를 누르면 위치·크기를 고치거나 폰트에서 뺄 수 있어요. 자모를 고치면 그 자모로 조합한 글자가 모두 함께 바뀌어요.
+        마음에 안 드는 글자는 템플릿 그 쪽만 다시 써서 올리면 새 글씨로 바뀌어요.
+      </p>
       <ul className="grid">
         {list.map((g) => {
           const adj = project.adjust[g.char] ?? NO_ADJUST
-          const laid = layoutGlyph(g, s, adj)
           const changed = adj.dx || adj.dy || adj.scale !== 1
+          const jamo = isJamoKey(g.char)
           return (
             <li key={g.char}>
-              <button type="button" className={`tile${adj.off ? ' off' : ''}`} onClick={() => setEditing(g.char)} aria-label={`${g.char} 고치기`}>
-                <svg viewBox={`${laid.advance / 2 - 520} -950 1040 1300`} aria-hidden="true">
-                  <line x1={laid.advance / 2 - 520} x2={laid.advance / 2 + 520} y1={0} y2={0} className="baseline" />
-                  <path d={svgPath(laid.outlines)} />
-                </svg>
-                <span className="tile-char">{g.char}</span>
+              <button type="button" className={`tile${adj.off ? ' off' : ''}${jamo ? ' jamo' : ''}`} onClick={() => setEditing(g.char)} aria-label={`${jamo ? jamoLabel(g.char) : g.char} 고치기`}>
+                <GlyphTile glyph={g} settings={s} adjust={adj} />
+                <span className="tile-char">{jamo ? jamoLabel(g.char) : g.char}</span>
                 {changed && !adj.off && <span className="tile-dot" aria-label="고친 글자" />}
               </button>
             </li>

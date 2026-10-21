@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { Update } from '../App.tsx'
+import type { Counts, Update } from '../App.tsx'
 import { request, warmup } from '../engine.ts'
-import { autoFit } from '../core/layout.ts'
+import { refit } from '../fit.ts'
 import type { GlyphRec } from '../project.ts'
 
 export type PhotoItem = {
@@ -22,7 +22,7 @@ type Props = {
   setPhotos: Dispatch<SetStateAction<PhotoItem[]>>
   update: Update
   weight: number
-  counts: { hangul: number; latin: number; total: number }
+  counts: Counts
   onNext: () => void
 }
 
@@ -63,15 +63,7 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
       }
       const add: Record<string, GlyphRec> = {}
       for (const g of res.glyphs) add[g.char] = { char: g.char, kind: g.kind, crop: g.crop, ink: res.ink, outlines: g.outlines, page: res.page.id }
-      update((p) => {
-        const glyphs = { ...p.glyphs, ...add }
-        const fit = autoFit(Object.values(glyphs))
-        const settings = { ...p.settings }
-        const fitted = { ...p.fitted }
-        if (!fitted.hangul && fit.hangulScale) { settings.hangulScale = fit.hangulScale; fitted.hangul = true }
-        if (!fitted.latin && fit.latinScale) { settings.latinScale = fit.latinScale; fitted.latin = true }
-        return { ...p, glyphs, settings, fitted }
-      })
+      update((p) => refit({ ...p, glyphs: { ...p.glyphs, ...add } }))
       patch(id, {
         status: 'done', pageTitle: res.page.title, found: res.glyphs.length, total: res.glyphs.length + res.empties.length,
         empties: res.empties, check: URL.createObjectURL(res.check),
@@ -129,7 +121,10 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
       )}
 
       <div className="next-row">
-        <span>모은 글자 <b>{counts.total}자</b> (한글 {counts.hangul} · 영문·기호 {counts.latin})</span>
+        <span>
+          모은 칸 <b>{counts.total}</b> (한글 {counts.hangul} · 자모 {counts.jamo} · 영문·기호 {counts.latin})
+          {counts.composable > 0 && <> · 자모로 조합할 수 있는 한글 <b>{counts.composable.toLocaleString()}자</b></>}
+        </span>
         <button type="button" className="primary" disabled={!counts.total || working} onClick={onNext}>다듬기 →</button>
       </div>
     </section>

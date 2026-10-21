@@ -9,6 +9,7 @@ const LICENSES: [string, string, string][] = [
   ['qrcode-generator', 'MIT', 'https://github.com/kazuhikoarase/qrcode-generator'],
   ['idb-keyval', 'Apache-2.0', 'https://github.com/jakearchibald/idb-keyval'],
   ['React', 'MIT', 'https://github.com/facebook/react'],
+  ['Pretendard (자모 안내 글자 모양)', 'SIL OFL 1.1, © Kil Hyung-jin', 'https://github.com/orioncactus/pretendard'],
 ]
 
 export default function Footer({ onRestart, hasWork }: { onRestart: () => void; hasWork: boolean }) {
