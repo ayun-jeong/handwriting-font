@@ -6,6 +6,9 @@ import { download } from './download.ts'
 
 type Choice = Preset['id'] | 'custom'
 
+// 99.66 must not read as 100%
+const pctLabel = (v: number) => `${v >= 99 ? v.toFixed(1) : v.toFixed(0)}%`
+
 export default function TemplateStep({ onNext }: { onNext: () => void }) {
   const [choice, setChoice] = useState<Choice>('careful')
   const [jamo, setJamo] = useState(true)
@@ -65,7 +68,7 @@ export default function TemplateStep({ onNext }: { onNext: () => void }) {
               <span className="preset-name">{p.name}{p.id === 'careful' && <span className="chip info">추천</span>}</span>
               <span className="preset-pages">{pagesN}쪽</span>
               <span className="preset-note">{p.note}</span>
-              <span className="preset-cov">직접 쓴 글씨가 일상 글의 <b>{koreanCoverage(p.korean).toFixed(0)}%</b></span>
+              <span className="preset-cov">직접 쓴 글씨가 일상 글의 <b>{pctLabel(koreanCoverage(p.korean))}</b></span>
             </label>
           )
         })}
