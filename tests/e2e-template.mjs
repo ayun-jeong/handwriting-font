@@ -1,4 +1,4 @@
-// E2E part 1: open the built site, download a 4-page template PDF (jamo 1-2, Korean page 1, Latin).
+// E2E part 1: open the built site, download a 5-page large-cell template PDF (jamo 1-2, Korean 1, Latin, symbols).
 import fs from 'node:fs'
 import path from 'node:path'
 import puppeteer from 'puppeteer-core'
@@ -15,7 +15,8 @@ const cdp = await page.createCDPSession()
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: path.resolve(out), eventsEnabled: true })
 await page.goto(url, { waitUntil: 'networkidle0' })
 await page.screenshot({ path: path.join(out, 'step1.png'), fullPage: true })
-// custom set: both jamo pages, Korean page 1, Latin page
+// large cells, custom set: both jamo pages, Korean set 1, Latin, symbols
+await page.click('#size-L')
 await page.click('#preset-custom')
 await page.select('#opt-to', '1')
 const done = new Promise((resolve) => cdp.on('Browser.downloadProgress', (e) => { if (e.state === 'completed') resolve(e) }))

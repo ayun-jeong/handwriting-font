@@ -1,4 +1,5 @@
-// Phone-width screenshots of every step after loading two photos.
+// Phone-width screenshots of every step after loading photos (default: two large-cell photos).
+// usage: node tests/e2e-mobile.mjs <url> <photos dir> <out dir> [photo ...]
 import path from 'node:path'
 import puppeteer from 'puppeteer-core'
 
@@ -11,8 +12,9 @@ await page.goto(url, { waitUntil: 'networkidle0' })
 await page.screenshot({ path: path.join(out, 'm1.png'), fullPage: true })
 await clickText('사진 올리기')
 const input = await page.$('#photo-input')
-await input.uploadFile(path.join(photosDir, 'latin_medium.jpg'), path.join(photosDir, 'hangul_medium.jpg'))
-await page.waitForFunction(() => document.querySelectorAll('.photo.done, .photo.error').length >= 2, { timeout: 180000 })
+const files = process.argv.slice(5).length ? process.argv.slice(5) : ['latin_medium.jpg', 'hangul_medium.jpg']
+await input.uploadFile(...files.map((f) => path.join(photosDir, f)))
+await page.waitForFunction((n) => document.querySelectorAll('.photo.done, .photo.error').length >= n, { timeout: 180000 }, files.length)
 await page.screenshot({ path: path.join(out, 'm2.png'), fullPage: true })
 await clickText('다듬기 →')
 await page.waitForFunction(() => getComputedStyle(document.querySelector('.preview-render')).fontFamily.includes('HandPreview'), { timeout: 20000 })

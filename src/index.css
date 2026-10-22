@@ -14,6 +14,7 @@
   --ok-wash: #e2f3ea;
   --bad: #b2352c;
   --bad-wash: #fae8e6;
+  --warn: #8f5500;
   --font-ui: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   --radius: 12px;
   color-scheme: light;
@@ -23,6 +24,7 @@
     --bg: #0e1215; --paper: #151b20; --ink: #e5ecf1; --ink-2: #c1ccd4; --muted: #909da7;
     --line: #27323b; --line-soft: #1d262d; --guide: #4aa3da; --guide-ink: #7cc3ee; --guide-wash: #132a39;
     --ok: #55c391; --ok-wash: #12291f; --bad: #f0857b; --bad-wash: #2f1714;
+    --warn: #e5b05a;
     color-scheme: dark;
   }
 }
@@ -114,6 +116,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .status { font-weight: 600; font-size: 0.95rem; }
 .status.ok { color: var(--ok); }
 .status.bad { color: var(--bad); }
+.hint.warn { color: var(--warn); }
 .spin { display: inline-block; width: 0.85em; height: 0.85em; border: 2px solid var(--line); border-top-color: var(--guide); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -0.1em; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -199,3 +202,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .preset-pages { font-size: 0.85rem; color: var(--ink-2); }
 .preset-note, .preset-cov { font-size: 0.8rem; color: var(--muted); }
 .page-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
+
+/* template cell size */
+.sizes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+.sizes-label { font-weight: 700; margin-right: 0.25rem; }
+.size { position: relative; display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0.5rem 0.8rem; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); cursor: pointer; }
+.size input { position: absolute; opacity: 0; pointer-events: none; }
+.size:has(input:focus-visible) { outline: 2px solid var(--guide); outline-offset: 2px; }
+.size span { font-size: 0.8rem; color: var(--muted); }
+.size.on { border-color: var(--guide); background: var(--guide-wash); }

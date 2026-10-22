@@ -40,7 +40,7 @@ for (const f of files) {
   const ttf = buildTTF(laid, meta)
   const base = path.join(out, f.replace('.jpg', ''))
   fs.writeFileSync(base + '.ttf', ttf)
-  fs.writeFileSync(base + '.json', JSON.stringify({ page: scan.page.id, kind: scan.page.kind, shifts, empties: empties.map((e) => e.index) }))
+  fs.writeFileSync(base + '.json', JSON.stringify({ page: scan.page.id, shifts, empties: empties.map((e) => e.index) }))
   if (f === files[0]) {
     fs.writeFileSync(base + '.otf', buildOTF(laid, meta))
     fs.writeFileSync(base + '.woff2', await buildWOFF2(ttf))

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Counts, Update } from '../App.tsx'
-import { isJamoKey, jamoLabel } from '../core/compose.ts'
+import { isJamoKey, isSyllable, jamoLabel } from '../core/compose.ts'
 import { DEFAULT_SETTINGS, NO_ADJUST, type Settings } from '../core/layout.ts'
 import type { GlyphRec, Project } from '../project.ts'
 import GlyphEditor from './GlyphEditor.tsx'
@@ -89,15 +89,15 @@ export default function AdjustStep({ project, update, family, building, counts, 
   const setSetting = (key: keyof Settings, v: number) => update((p) => ({ ...p, settings: { ...p.settings, [key]: v } }))
 
   const list = useMemo(() => {
-    const order = (g: GlyphRec) => (isJamoKey(g.char) ? 1 : g.kind === 'hangul' ? 0 : 2)
+    const order = (g: GlyphRec) => (isJamoKey(g.char) ? 1 : isSyllable(g.char) ? 0 : 2)
     const all = Object.values(project.glyphs).sort((a, b) => order(a) - order(b) || (isJamoKey(a.char) ? 0 : a.char.localeCompare(b.char, 'ko')))
     return all.filter((g) => {
       const off = project.adjust[g.char]?.off
       if (filter === 'off') return off
       if (filter === 'all') return true
       if (filter === 'jamo') return isJamoKey(g.char)
-      if (filter === 'hangul') return g.kind === 'hangul' && !isJamoKey(g.char)
-      return g.kind === 'latin'
+      if (filter === 'hangul') return isSyllable(g.char)
+      return !isSyllable(g.char) && !isJamoKey(g.char)
     })
   }, [project.glyphs, project.adjust, filter])
   const offCount = Object.values(project.adjust).filter((a) => a.off).length
@@ -114,7 +114,7 @@ export default function AdjustStep({ project, update, family, building, counts, 
 
   const chips: [Filter, string][] = [
     ['all', `전체 ${counts.total}`], ['hangul', `한글 ${counts.hangul}`], ['jamo', `자모 ${counts.jamo}`],
-    ['latin', `영문·기호 ${counts.latin}`], ['off', `뺀 글자 ${offCount}`],
+    ['latin', `영문·숫자·기호 ${counts.latin}`], ['off', `뺀 글자 ${offCount}`],
   ]
 
   return (

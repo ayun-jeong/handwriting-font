@@ -100,10 +100,45 @@ function vertical(glyphs: FontGlyph[]) {
   return { winAscent: Math.ceil(top), winDescent: Math.ceil(-bottom) }
 }
 
-const OS2_RANGES = {
-  ulUnicodeRange1: (1 << 0) | (1 << 28), // Basic Latin, Hangul Jamo
-  ulUnicodeRange2: 1 << (56 - 32), // Hangul Syllables
-  ulCodePageRange1: (1 << 0) | (1 << 19), // Latin 1, Korean Wansung
+// OS/2 ulUnicodeRange bits of the Unicode blocks this app's characters come from
+const BLOCKS: [number, number, number][] = [
+  [0x0000, 0x007f, 0], // Basic Latin
+  [0x0080, 0x00ff, 1], // Latin-1 Supplement
+  [0x1100, 0x11ff, 28], // Hangul Jamo
+  [0x2000, 0x206f, 31], // General Punctuation
+  [0x20a0, 0x20cf, 33], // Currency Symbols
+  [0x2100, 0x214f, 35], // Letterlike Symbols
+  [0x2190, 0x21ff, 37], // Arrows
+  [0x2200, 0x22ff, 38], // Mathematical Operators
+  [0x25a0, 0x25ff, 45], // Geometric Shapes
+  [0x2600, 0x26ff, 46], // Miscellaneous Symbols
+  [0x2700, 0x27bf, 47], // Dingbats
+  [0x3000, 0x303f, 48], // CJK Symbols and Punctuation
+  [0x3130, 0x318f, 52], // Hangul Compatibility Jamo
+  [0xac00, 0xd7af, 56], // Hangul Syllables
+]
+
+type Ranges = ReturnType<typeof os2Ranges>
+
+/** fonteditor-core rewrites ulUnicodeRange2 on write (always claiming Private Use), so the bits are set again here. */
+const withRanges = (r: Ranges) => (os2: Uint8Array): Uint8Array => {
+  const out = os2.slice()
+  const v = new DataView(out.buffer)
+  v.setUint32(42, r.ulUnicodeRange1); v.setUint32(46, r.ulUnicodeRange2); v.setUint32(50, r.ulUnicodeRange3); v.setUint32(54, r.ulUnicodeRange4)
+  return out
+}
+
+function os2Ranges(glyphs: FontGlyph[]) {
+  const r = [1, 0, 0, 0] // the space is always there
+  for (const g of glyphs) {
+    if (g.unicode === undefined) continue
+    const b = BLOCKS.find(([lo, hi]) => g.unicode! >= lo && g.unicode! <= hi)
+    if (b) r[b[2] >> 5] |= 1 << (b[2] & 31)
+  }
+  return {
+    ulUnicodeRange1: r[0] >>> 0, ulUnicodeRange2: r[1] >>> 0, ulUnicodeRange3: r[2] >>> 0, ulUnicodeRange4: r[3] >>> 0,
+    ulCodePageRange1: (1 << 0) | (1 << 19), // Latin 1, Korean Wansung
+  }
 }
 
 export function buildTTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
@@ -111,6 +146,7 @@ export function buildTTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
   const ttf = font.get() as any
   const notdef = ttf.glyf[0]
   const { winAscent, winDescent } = vertical(glyphs)
+  const ranges = os2Ranges(glyphs)
   ttf.head.unitsPerEm = 1000
   ttf.head.created = ttf.head.modified = Date.now()
   Object.assign(ttf.hhea, { ascent: ASC, descent: DESC, lineGap: meta.settings.lineGap })
@@ -118,7 +154,7 @@ export function buildTTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
     fsType: meta.embedding === 'installable' ? 0 : 8,
     usWeightClass: 400, fsSelection: 64 | 128, achVendID: 'NONE',
     sTypoAscender: ASC, sTypoDescender: DESC, sTypoLineGap: meta.settings.lineGap,
-    usWinAscent: winAscent, usWinDescent: winDescent, ...OS2_RANGES,
+    usWinAscent: winAscent, usWinDescent: winDescent, ...ranges,
   })
   ttf.post.format = 3
   const index = new Map<string, number>()
@@ -157,7 +193,7 @@ export function buildTTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
   ]
   font.set(ttf)
   const raw = new Uint8Array(font.write({ type: 'ttf', hinting: false }) as ArrayBuffer)
-  return replaceTables(raw, { name: nameTable(meta) })
+  return replaceTables(raw, { name: nameTable(meta), 'OS/2': withRanges(ranges) })
 }
 
 /** OTF (CFF) has no composite glyphs, so assembled syllables are flattened. */
@@ -187,12 +223,13 @@ export function buildOTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
   }
   const f = new OTFont({ familyName: ascii, styleName: 'Regular', postScriptName: ps, unitsPerEm: 1000, ascender: ASC, descender: DESC, glyphs: list } as any)
   const { winAscent, winDescent } = vertical(glyphs)
+  const ranges = os2Ranges(glyphs)
   ;(f as any).tables.os2 = {
     fsType: meta.embedding === 'installable' ? 0 : 8, fsSelection: 64 | 128,
-    sTypoLineGap: meta.settings.lineGap, usWinAscent: winAscent, usWinDescent: winDescent, ...OS2_RANGES,
+    sTypoLineGap: meta.settings.lineGap, usWinAscent: winAscent, usWinDescent: winDescent, ...ranges,
   }
   const raw = new Uint8Array(f.toArrayBuffer())
-  return replaceTables(raw, { name: nameTable(meta) })
+  return replaceTables(raw, { name: nameTable(meta), 'OS/2': withRanges(ranges) })
 }
 
 let woff2Ready: Promise<unknown> | null = null

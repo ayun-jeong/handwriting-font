@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { Counts, Update } from '../App.tsx'
 import { request, warmup } from '../engine.ts'
 import { refit } from '../fit.ts'
+import { photoTooSoft } from '../core/geometry.ts'
 import type { GlyphRec } from '../project.ts'
 
 export type PhotoItem = {
@@ -9,10 +10,20 @@ export type PhotoItem = {
   name: string
   thumb: string
   status: 'working' | 'done' | 'error'
+  /** Share of the scan done, 0..1, while working. */
+  progress?: number
   message?: string
   pageTitle?: string
+  pageId?: string
+  /** Slot indices of the cells inside this photo. */
+  seen?: number[]
   found?: number
+  /** Cells inside this photo, and on the whole page. */
   total?: number
+  pageCells?: number
+  /** Photo pixels across one cell, and the photo's blur in photo pixels. */
+  cellPx?: number
+  blurPx?: number
   empties?: string[]
   check?: string
 }
@@ -29,7 +40,7 @@ type Props = {
 let photoId = 0
 
 const FAIL: Record<string, (markers: number) => string> = {
-  markers: (m) => `모서리 표식을 ${m}/4개만 찾았어요. 종이 네 모서리가 다 보이게 다시 찍어 주세요.`,
+  markers: (m) => `검은 네모 표식을 ${m}개만 찾았어요(3개 이상 필요). 네 모서리가 다 보이게, 반씩 찍을 땐 가운데 양쪽 표식도 보이게 다시 찍어 주세요.`,
   qr: () => 'QR 코드를 읽지 못했어요. 조금 더 가까이, 흔들리지 않게 찍어 주세요.',
   page: () => '이 사이트에서 받은 템플릿이 아닌 것 같아요.',
 }
@@ -39,6 +50,14 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
   const pick = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
   const working = photos.some((p) => p.status === 'working')
+  // cells of each template page seen in any photo, so half-page photos can be checked together
+  const covered = new Map<string, Set<number>>()
+  for (const p of photos) {
+    if (p.status !== 'done' || !p.pageId || !p.seen) continue
+    const set = covered.get(p.pageId) ?? new Set<number>()
+    for (const i of p.seen) set.add(i)
+    covered.set(p.pageId, set)
+  }
 
   useEffect(() => { warmup() }, [])
 
@@ -55,7 +74,7 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
       return
     }
     try {
-      const res = await request({ t: 'scan', bitmap, weight }, [bitmap])
+      const res = await request({ t: 'scan', bitmap, weight }, [bitmap], (done) => patch(id, { progress: done }))
       if (res.t !== 'scanned') throw new Error('unexpected reply')
       if (!res.ok) {
         patch(id, { status: 'error', message: FAIL[res.reason](res.markers) })
@@ -65,8 +84,8 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
       for (const g of res.glyphs) add[g.char] = { char: g.char, kind: g.kind, crop: g.crop, ink: res.ink, outlines: g.outlines, page: res.page.id }
       update((p) => refit({ ...p, glyphs: { ...p.glyphs, ...add } }))
       patch(id, {
-        status: 'done', pageTitle: res.page.title, found: res.glyphs.length, total: res.glyphs.length + res.empties.length,
-        empties: res.empties, check: URL.createObjectURL(res.check),
+        status: 'done', pageTitle: res.page.title, pageId: res.page.id, seen: res.seen, found: res.glyphs.length, total: res.visible, pageCells: res.total,
+        cellPx: res.cellPx, blurPx: res.blurPx, empties: res.empties, check: URL.createObjectURL(res.check),
       })
     } catch (err) {
       patch(id, { status: 'error', message: `처리하다 문제가 생겼어요: ${err instanceof Error ? err.message : err}` })
@@ -93,7 +112,7 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
           <button type="button" className="primary" onClick={() => pick.current?.click()}>사진 고르기</button>
           <button type="button" className="secondary camera" onClick={() => camera.current?.click()}>카메라로 찍기</button>
         </div>
-        <p className="hint">여기에 사진을 끌어다 놓아도 돼요. 그림자 없이 위에서, 네 모서리 표식과 QR이 다 보이게 찍어 주세요.</p>
+        <p className="hint">여기에 사진을 끌어다 놓아도 돼요. 그림자 없이 위에서 찍어 주세요. 작은 칸 템플릿은 위·아래 반씩 가까이 찍어 올려도 돼요(가운데 양쪽 표식이 보이게).</p>
         <input ref={pick} id="photo-input" type="file" accept="image/*,.heic,.heif" multiple hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = '' }} />
         <input ref={camera} id="camera-input" type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = '' }} />
       </div>
@@ -105,12 +124,36 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
               <img src={p.thumb} alt="" width={72} height={96} />
               <div className="photo-body">
                 <div className="photo-name">{p.name}</div>
-                {p.status === 'working' && <div className="status"><span className="spin" aria-hidden="true" /> 글자를 찾는 중… 처음 한 번은 준비하는 데 몇 초 걸려요</div>}
+                {p.status === 'working' && (
+                  <div className="status">
+                    <span className="spin" aria-hidden="true" />{' '}
+                    {p.progress === undefined ? '글자를 찾는 중… 처음 한 번은 준비하는 데 몇 초 걸려요' : `글자를 찾는 중… ${Math.round(p.progress * 100)}%`}
+                  </div>
+                )}
                 {p.status === 'done' && (
                   <>
                     <div className="status ok">{p.pageTitle} · {p.found}/{p.total}칸 인식</div>
-                    {p.empties && p.empties.length > 0 && <div className="hint">비어 있는 칸: {p.empties.join(' ')}</div>}
-                    {p.check && <a className="hint" href={p.check} target="_blank" rel="noreferrer">인식 결과 보기 (초록 = 인식, 빨강 = 빈칸)</a>}
+                    {p.cellPx !== undefined && p.blurPx !== undefined && photoTooSoft(p.cellPx, p.blurPx) && (
+                      <div className="hint warn">
+                        {p.cellPx < 50
+                          ? `사진 속 칸이 작아서(칸 하나가 ${p.cellPx}픽셀) 획이 굵게 뭉개질 수 있어요. 종이에 더 가까이, 위·아래 반씩 나눠 찍어 보세요.`
+                          : '사진이 조금 흐려서 획이 굵게 뭉개질 수 있어요. 초점을 맞추고 흔들리지 않게 다시 찍어 보세요.'}
+                      </div>
+                    )}
+                    {p.pageCells !== undefined && p.total !== undefined && p.total < p.pageCells && (() => {
+                      const missing = p.pageCells - (covered.get(p.pageId!)?.size ?? p.total)
+                      return missing > 0
+                        ? <div className="hint">이 사진에 칸 {p.total}/{p.pageCells}개가 보였어요. 아직 안 찍힌 {missing}칸은 나머지 부분을 찍어 올려 주세요.</div>
+                        : <div className="hint">다른 사진과 합쳐 이 쪽의 {p.pageCells}칸이 모두 모였어요.</div>
+                    })()}
+                    {p.empties && p.empties.length > 0 && (
+                      <div className="hint">비어 있는 칸 {p.empties.length}개{p.empties.length <= 20 ? `: ${p.empties.map((c) => (c.startsWith('j:') ? '자모' : c)).join(' ')}` : ''}</div>
+                    )}
+                    {p.check && (
+                      <a className="hint" href={p.check} target="_blank" rel="noreferrer">
+                        인식 결과 보기 (초록 = 인식, 빨강 = 빈칸{p.total !== undefined && p.pageCells !== undefined && p.total < p.pageCells ? ', 회색 = 사진 밖' : ''})
+                      </a>
+                    )}
                   </>
                 )}
                 {p.status === 'error' && <div className="status bad">{p.message}</div>}

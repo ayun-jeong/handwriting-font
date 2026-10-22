@@ -51,9 +51,14 @@ export function writeFont(version: number, tables: Map<string, Uint8Array>): Uin
   return out
 }
 
-export function replaceTables(font: Uint8Array, replace: Record<string, Uint8Array>): Uint8Array {
+/** Replace tables, given as new bytes or as a function of the old ones. */
+export function replaceTables(font: Uint8Array, replace: Record<string, Uint8Array | ((old: Uint8Array) => Uint8Array)>): Uint8Array {
   const { version, tables } = readTables(font)
-  for (const [tag, data] of Object.entries(replace)) tables.set(tag, data)
+  for (const [tag, data] of Object.entries(replace)) {
+    const old = tables.get(tag)
+    if (typeof data !== 'function') tables.set(tag, data)
+    else if (old) tables.set(tag, data(old))
+  }
   return writeFont(version, tables)
 }
 

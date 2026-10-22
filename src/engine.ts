@@ -1,7 +1,7 @@
 // Main-thread handle on the processing worker.
 import type { EngineRequest, EngineResponse } from './worker/protocol.ts'
 
-type Pending = { resolve: (r: EngineResponse) => void; reject: (e: Error) => void }
+type Pending = { resolve: (r: EngineResponse) => void; reject: (e: Error) => void; progress?: (done: number) => void }
 
 let worker: Worker | null = null
 let nextId = 1
@@ -13,6 +13,7 @@ function getWorker(): Worker {
   worker.onmessage = (e: MessageEvent<EngineResponse>) => {
     const p = pending.get(e.data.id)
     if (!p) return
+    if (e.data.t === 'progress') { p.progress?.(e.data.done); return }
     pending.delete(e.data.id)
     if (e.data.t === 'error') p.reject(new Error(e.data.message))
     else p.resolve(e.data)
@@ -26,10 +27,12 @@ function getWorker(): Worker {
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 
-export function request(msg: DistributiveOmit<EngineRequest, 'id'>, transfer: Transferable[] = []): Promise<EngineResponse> {
+export function request(
+  msg: DistributiveOmit<EngineRequest, 'id'>, transfer: Transferable[] = [], progress?: (done: number) => void,
+): Promise<EngineResponse> {
   const id = nextId++
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject })
+    pending.set(id, { resolve, reject, progress })
     getWorker().postMessage({ ...msg, id }, transfer)
   })
 }

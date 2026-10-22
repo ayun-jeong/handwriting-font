@@ -1,6 +1,6 @@
 // Automatic sizing, applied as photos come in (each step once, so later photos never undo the user's sliders).
 import { koreanPage } from './core/charsets.ts'
-import { isJamoKey } from './core/compose.ts'
+import { isSyllable } from './core/compose.ts'
 import { assembledOutlines } from './core/glyphset.ts'
 import { bounds, fitScale } from './core/layout.ts'
 import type { Outline } from './core/tracer.ts'
@@ -11,7 +11,7 @@ const median = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length
 export function refit(p: Project): Project {
   const all = Object.values(p.glyphs)
   const sources = all.map((g) => ({ key: g.char, kind: g.kind, outlines: g.outlines }))
-  const written = all.filter((g) => g.kind === 'hangul' && !isJamoKey(g.char))
+  const written = all.filter((g) => isSyllable(g.char))
   const settings = { ...p.settings }
   const fitted = { ...p.fitted }
   const height = (o: Outline[]) => { const b = bounds(o); return b[3] - b[1] }

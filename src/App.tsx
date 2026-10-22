@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { request } from './engine.ts'
-import { JAMO_EXAMPLES, isJamoKey } from './core/compose.ts'
+import { JAMO_EXAMPLES, isJamoKey, isSyllable } from './core/compose.ts'
 import { availableChars, type SourceGlyph } from './core/glyphset.ts'
 import { clearProject, emptyProject, loadProject, saveProject, type Project } from './project.ts'
 import { sampleText } from './sampleText.ts'
@@ -87,7 +87,7 @@ export default function App() {
     let hangul = 0, jamo = 0, latin = 0
     for (const g of Object.values(project.glyphs)) {
       if (isJamoKey(g.char)) jamo++
-      else if (g.kind === 'hangul') hangul++
+      else if (isSyllable(g.char)) hangul++
       else latin++
     }
     return { hangul, jamo, latin, composable: available.composable.size, total: hangul + jamo + latin }

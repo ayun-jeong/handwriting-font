@@ -2,8 +2,8 @@
 // Heavy lifting off the main thread: OpenCV.js (13 MB) is loaded here on first use.
 import cvModule from '@techstark/opencv-js'
 import type { CV } from '../core/cv.ts'
-import { BOX, PAGE_H, PAGE_W, cellBox } from '../core/geometry.ts'
-import { extractMask, maskToOutlines, scanPage, traceCells } from '../core/pipeline.ts'
+import { LAYOUTS, type LayoutId } from '../core/geometry.ts'
+import { OVERVIEW, extractMask, maskToOutlines, scanPage, traceCells, type RGBAImage } from '../core/pipeline.ts'
 import type { EngineRequest, EngineResponse, ScannedGlyph } from './protocol.ts'
 
 declare const self: DedicatedWorkerGlobalScope
@@ -31,23 +31,24 @@ function post(msg: EngineResponse, transfer: Transferable[] = []) {
   self.postMessage(msg, transfer)
 }
 
-const MAX_SIDE = 4200
+const MAX_SIDE = 5000
 
-async function checkImage(warped: { data: Uint8Array | Uint8ClampedArray }, found: Set<number>, total: number): Promise<Blob> {
-  const full = new OffscreenCanvas(PAGE_W, PAGE_H)
-  const fctx = full.getContext('2d')!
-  const px = new Uint8ClampedArray(PAGE_W * PAGE_H * 4)
-  px.set(warped.data)
-  fctx.putImageData(new ImageData(px, PAGE_W, PAGE_H), 0, 0)
-  fctx.lineWidth = 8
-  for (let i = 0; i < total; i++) {
-    const [x, y] = cellBox(i)
-    fctx.strokeStyle = found.has(i) ? 'rgb(30,160,90)' : 'rgb(220,60,50)'
-    fctx.strokeRect(x - 4, y - 4, BOX + 8, BOX + 8)
-  }
-  const small = new OffscreenCanvas(620, 877)
-  small.getContext('2d')!.drawImage(full, 0, 0, 620, 877)
-  return small.convertToBlob({ type: 'image/jpeg', quality: 0.8 })
+/** The page as the scanner saw it, with every cell marked: green read, red empty, grey outside this photo. */
+async function checkImage(ov: RGBAImage, layout: LayoutId, found: Set<number>, visible: boolean[]): Promise<Blob> {
+  const c = new OffscreenCanvas(ov.width, ov.height)
+  const ctx = c.getContext('2d')!
+  const px = new Uint8ClampedArray(ov.width * ov.height * 4)
+  px.set(ov.data)
+  ctx.putImageData(new ImageData(px, ov.width, ov.height), 0, 0)
+  const lay = LAYOUTS[layout]
+  const b = lay.box * OVERVIEW
+  ctx.lineWidth = Math.max(1.5, b / 28)
+  visible.forEach((v, i) => {
+    const [x, y] = lay.slots[i]
+    ctx.strokeStyle = !v ? 'rgba(120,120,120,0.6)' : found.has(i) ? 'rgb(30,160,90)' : 'rgb(220,60,50)'
+    ctx.strokeRect(x * OVERVIEW - 1, y * OVERVIEW - 1, b + 2, b + 2)
+  })
+  return c.convertToBlob({ type: 'image/jpeg', quality: 0.85 })
 }
 
 self.onmessage = async (e: MessageEvent<EngineRequest>) => {
@@ -68,18 +69,25 @@ self.onmessage = async (e: MessageEvent<EngineRequest>) => {
       ctx.drawImage(bmp, 0, 0, w, h)
       bmp.close()
       const img = ctx.getImageData(0, 0, w, h)
-      const scan = scanPage(cv, img)
+      let last = 0
+      const progress = (done: number) => {
+        if (done - last < 0.02) return
+        last = done
+        post({ t: 'progress', id: msg.id, done })
+      }
+      const scan = scanPage(cv, img, progress)
       if (!scan.ok) {
         post({ t: 'scanned', id: msg.id, ok: false, reason: scan.reason, markers: scan.markers.length })
         return
       }
-      const { glyphs, empties } = traceCells(cv, scan, msg.weight)
-      const check = await checkImage(scan.warped, new Set(glyphs.map((g) => g.index)), scan.cells.length)
+      const { glyphs, empties } = traceCells(cv, scan, msg.weight, progress)
+      const check = await checkImage(scan.overview, scan.page.layout, new Set(glyphs.map((g) => g.index)), scan.visible)
       const out: ScannedGlyph[] = glyphs.map((g) => ({ index: g.index, char: g.char, kind: g.kind, crop: g.crop, outlines: g.outlines }))
       post({
         t: 'scanned', id: msg.id, ok: true,
-        page: { id: scan.page.id, title: scan.page.title, kind: scan.page.kind },
+        page: { id: scan.page.id, title: scan.page.title, layout: scan.page.layout },
         ink: scan.ink, glyphs: out, empties: empties.map((c) => c.char), check,
+        visible: scan.cells.length, total: scan.visible.length, seen: scan.cells.map((c) => c.index), cellPx: Math.round(scan.cellPx), blurPx: Math.round(scan.blurPx * 100) / 100,
       }, out.map((g) => g.crop.buffer as ArrayBuffer))
       return
     }
