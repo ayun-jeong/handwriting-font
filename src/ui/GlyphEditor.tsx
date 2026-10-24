@@ -10,13 +10,15 @@ type Props = {
   order: string[]
   settings: Settings
   adjust: GlyphAdjust
+  /** Offset from autoAlign. */
+  auto: number
   family: string | null
   onChange: (a: GlyphAdjust) => void
   onGo: (char: string) => void
   onClose: () => void
 }
 
-export default function GlyphEditor({ glyph, order, settings, adjust, family, onChange, onGo, onClose }: Props) {
+export default function GlyphEditor({ glyph, order, settings, adjust, auto, family, onChange, onGo, onClose }: Props) {
   const photo = useRef<HTMLCanvasElement>(null)
   const dialog = useRef<HTMLDivElement>(null)
   const at = order.indexOf(glyph.char)
@@ -87,7 +89,7 @@ export default function GlyphEditor({ glyph, order, settings, adjust, family, on
             <figcaption>사진 속 칸과 따낸 윤곽(파란 선)</figcaption>
           </figure>
           <figure>
-            <GlyphTile glyph={glyph} settings={settings} adjust={adjust} className="crop result" />
+            <GlyphTile glyph={glyph} settings={settings} adjust={adjust} auto={auto} className="crop result" />
             <figcaption>{jamo ? '조합에 쓰일 모양(연한 부분 = 나머지 자모 자리)' : '폰트에 들어갈 모양(옅은 띠 = 글자 폭)'}</figcaption>
           </figure>
         </div>

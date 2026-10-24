@@ -1,8 +1,9 @@
 // Everything the user made, kept in this browser's IndexedDB only (never sent anywhere).
 import { del, get, set } from 'idb-keyval'
 import type { Embedding } from './core/font.ts'
+import { isJamoKey } from './core/compose.ts'
 import type { Kind } from './core/geometry.ts'
-import { DEFAULT_SETTINGS, type GlyphAdjust, type Settings } from './core/layout.ts'
+import { DEFAULT_SETTINGS, autoAlign, type GlyphAdjust, type Settings } from './core/layout.ts'
 import type { Outline } from './core/tracer.ts'
 
 export type GlyphRec = {
@@ -44,7 +45,15 @@ export async function loadProject(): Promise<Project | null> {
       hangul: f?.hangul === true ? 'written' : f?.hangul === 'composed' || f?.hangul === 'written' ? f.hangul : 'none',
       latin: !!f?.latin, composed: !!f?.composed,
     }
-    return { ...emptyProject(), ...p, settings: { ...DEFAULT_SETTINGS, ...p.settings }, fitted }
+    const settings = { ...DEFAULT_SETTINGS, ...p.settings }
+    let adjust = p.adjust
+    // saved before the automatic line-up: heights were matched against glyphs that weren't lined up yet
+    if ((p.settings as Partial<Settings>).align === undefined) {
+      settings.composedShift = 0
+      const moved = autoAlign(Object.values(p.glyphs).filter((g) => !isJamoKey(g.char)))
+      adjust = Object.fromEntries(Object.entries(p.adjust).map(([k, a]) => [k, moved.has(k) ? { ...a, dy: 0 } : a]))
+    }
+    return { ...emptyProject(), ...p, settings, adjust, fitted }
   } catch {
     return null
   }

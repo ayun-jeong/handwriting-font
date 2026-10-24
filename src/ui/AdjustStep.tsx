@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Counts, Update } from '../App.tsx'
 import { isJamoKey, isSyllable, jamoLabel } from '../core/compose.ts'
-import { DEFAULT_SETTINGS, NO_ADJUST, type Settings } from '../core/layout.ts'
+import { DEFAULT_SETTINGS, NO_ADJUST, autoAlign, type Settings } from '../core/layout.ts'
 import type { GlyphRec, Project } from '../project.ts'
 import GlyphEditor from './GlyphEditor.tsx'
 import GlyphTile from './GlyphTile.tsx'
@@ -34,6 +34,11 @@ const GROUPS: { title: string; note?: string; items: SliderDef[] }[] = [
     ],
   },
   {
+    title: '줄 맞춤',
+    note: '칸마다 높이가 들쑥날쑥하게 쓰인 글자를 한 줄에 맞춰요. 한글·기호는 가운데, 영문·숫자는 바닥선에 맞춰요. 0%면 쓴 그대로예요.',
+    items: [{ key: 'align', label: '위아래 맞춤', min: 0, max: 1, step: 0.05, fmt: pct }],
+  },
+  {
     title: '굵기',
     note: '가는 펜이라 얇게 나왔다면 올리고, 번져서 뭉쳤다면 내려 보세요.',
     items: [{ key: 'weight', label: '획 굵기', min: -3, max: 3, step: 1, fmt: signed }],
@@ -47,7 +52,7 @@ const GROUPS: { title: string; note?: string; items: SliderDef[] }[] = [
   },
   {
     title: '조합한 한글',
-    note: '자모로 만든 글자를 직접 쓴 글자와 맞춰요. 처음엔 같은 글자끼리 비교해 자동으로 맞춰 둬요.',
+    note: '자모로 만든 글자를 직접 쓴 글자와 맞춰요. 크기는 처음에 같은 글자끼리 비교해 자동으로 맞춰 둬요.',
     items: [
       { key: 'composedScale', label: '크기', min: 0.6, max: 1.6, step: 0.01, fmt: pct },
       { key: 'composedShift', label: '높이', min: -200, max: 200, step: 5, fmt: signed },
@@ -84,6 +89,9 @@ export default function AdjustStep({ project, update, family, building, counts, 
   }, [text, written, composable])
   const missing = useMemo(() => [...new Set([...text].filter((c) => c.trim() && !written.has(c) && !composable.has(c)))], [text, written, composable])
   const composedHere = useMemo(() => new Set([...text].filter((c) => composable.has(c))).size, [text, composable])
+
+  // the same per-glyph line-up offsets the font build uses, so tiles show what the font will look like
+  const auto = useMemo(() => autoAlign(Object.values(project.glyphs).filter((g) => !isJamoKey(g.char))), [project.glyphs])
 
   const s = project.settings
   const setSetting = (key: keyof Settings, v: number) => update((p) => ({ ...p, settings: { ...p.settings, [key]: v } }))
@@ -182,7 +190,7 @@ export default function AdjustStep({ project, update, family, building, counts, 
           return (
             <li key={g.char}>
               <button type="button" className={`tile${adj.off ? ' off' : ''}${jamo ? ' jamo' : ''}`} onClick={() => setEditing(g.char)} aria-label={`${jamo ? jamoLabel(g.char) : g.char} 고치기`}>
-                <GlyphTile glyph={g} settings={s} adjust={adj} />
+                <GlyphTile glyph={g} settings={s} adjust={adj} auto={auto.get(g.char)} />
                 <span className="tile-char">{jamo ? jamoLabel(g.char) : g.char}</span>
                 {changed && !adj.off && <span className="tile-dot" aria-label="고친 글자" />}
               </button>
@@ -202,6 +210,7 @@ export default function AdjustStep({ project, update, family, building, counts, 
           order={list.map((g) => g.char)}
           settings={s}
           adjust={project.adjust[editing] ?? NO_ADJUST}
+          auto={auto.get(editing) ?? 0}
           family={family}
           onChange={(a) => update((p) => ({ ...p, adjust: { ...p.adjust, [editing]: a } }))}
           onGo={setEditing}

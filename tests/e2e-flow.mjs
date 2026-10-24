@@ -39,6 +39,7 @@ await page.screenshot({ path: path.join(out, 'step3-default.png'), fullPage: fal
 await setRange('set-tracking', -40)
 await setRange('set-latinScale', 0.9)
 await setRange('set-weight', 1)
+await setRange('set-align', 0.5)
 await page.waitForFunction(() => !document.querySelector('.preview-bar .spin'), { timeout: 60000 })
 await sleep(1200)
 await page.screenshot({ path: path.join(out, 'step3-adjusted.png'), fullPage: false })

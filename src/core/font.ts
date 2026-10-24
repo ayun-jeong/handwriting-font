@@ -182,11 +182,11 @@ export function buildTTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
       for (const c of g.components) {
         const b = box.get(c.name)!
-        x0 = Math.min(x0, b[0] + c.dx); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2] + c.dx); y1 = Math.max(y1, b[3])
+        x0 = Math.min(x0, b[0] + c.dx); y0 = Math.min(y0, b[1] + c.dy); x1 = Math.max(x1, b[2] + c.dx); y1 = Math.max(y1, b[3] + c.dy)
       }
       return {
         compound: true,
-        glyfs: g.components.map((c) => ({ glyphIndex: index.get(c.name)!, transform: { a: 1, b: 0, c: 0, d: 1, e: c.dx, f: 0 } })),
+        glyfs: g.components.map((c) => ({ glyphIndex: index.get(c.name)!, transform: { a: 1, b: 0, c: 0, d: 1, e: c.dx, f: c.dy } })),
         advanceWidth: g.advance, leftSideBearing: x0, xMin: x0, yMin: y0, xMax: x1, yMax: y1, name: g.name, unicode: [g.unicode],
       }
     }),
@@ -203,10 +203,10 @@ export function buildOTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
   nd.moveTo(50, 0); nd.lineTo(450, 0); nd.lineTo(450, 700); nd.lineTo(50, 700); nd.close()
   nd.moveTo(100, 50); nd.lineTo(100, 650); nd.lineTo(400, 650); nd.lineTo(400, 50); nd.close()
   const byName = new Map(glyphs.map((g) => [g.name, g]))
-  const draw = (path: any, outlines: Outline[], dx = 0) => {
+  const draw = (path: any, outlines: Outline[], dx = 0, dy = 0) => {
     for (const o of orient(outlines, true)) {
-      path.moveTo(o.segs[0][0][0] + dx, o.segs[0][0][1])
-      for (const [, c1, c2, p] of o.segs) path.curveTo(c1[0] + dx, c1[1], c2[0] + dx, c2[1], p[0] + dx, p[1])
+      path.moveTo(o.segs[0][0][0] + dx, o.segs[0][0][1] + dy)
+      for (const [, c1, c2, p] of o.segs) path.curveTo(c1[0] + dx, c1[1] + dy, c2[0] + dx, c2[1] + dy, p[0] + dx, p[1] + dy)
       path.close()
     }
   }
@@ -218,7 +218,7 @@ export function buildOTF(glyphs: FontGlyph[], meta: FontMeta): Uint8Array {
     if (g.unicode === undefined) continue // jamo variants live inside the flattened syllables
     const path = new OTPath()
     if (g.type === 'simple') draw(path, g.outlines)
-    else for (const c of g.components) draw(path, (byName.get(c.name) as { outlines: Outline[] }).outlines, c.dx)
+    else for (const c of g.components) draw(path, (byName.get(c.name) as { outlines: Outline[] }).outlines, c.dx, c.dy)
     list.push(new OTGlyph({ name: g.name, unicode: g.unicode, advanceWidth: g.advance, path }))
   }
   const f = new OTFont({ familyName: ascii, styleName: 'Regular', postScriptName: ps, unitsPerEm: 1000, ascender: ASC, descender: DESC, glyphs: list } as any)

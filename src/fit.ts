@@ -27,20 +27,17 @@ export function refit(p: Project): Project {
     }
   }
 
-  // assembled syllables: same size and height as the same syllables written by hand
+  // assembled syllables: same size as the same syllables written by hand (both are centred by autoAlign)
   if (!fitted.composed && written.length >= 8) {
-    const ratios: number[] = [], shifts: number[] = []
+    const ratios: number[] = []
     for (const g of written) {
       const [a] = assembledOutlines(sources, [g.char])
       if (!a) continue
       const bw = bounds(g.outlines), ba = bounds(a)
-      const r = (bw[3] - bw[1]) / (ba[3] - ba[1])
-      ratios.push(r)
-      shifts.push((bw[1] + bw[3]) / 2 - (380 + ((ba[1] + ba[3]) / 2 - 380) * r))
+      ratios.push((bw[3] - bw[1]) / (ba[3] - ba[1]))
     }
     if (ratios.length >= 8) {
       settings.composedScale = Math.round(Math.min(1.6, Math.max(0.6, median(ratios))) * 100) / 100
-      settings.composedShift = Math.round(median(shifts))
       fitted.composed = true
     }
   }

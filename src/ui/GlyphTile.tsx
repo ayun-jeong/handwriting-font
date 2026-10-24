@@ -5,8 +5,10 @@ import { mapOutlines } from '../core/tracer.ts'
 import { composedToFont } from '../core/glyphset.ts'
 import type { GlyphRec } from '../project.ts'
 
+type Props = { glyph: GlyphRec; settings: Settings; adjust: GlyphAdjust; /** Offset from autoAlign. */ auto?: number; className?: string }
+
 /** Written glyphs are drawn as they will be spaced; jamo pieces in place, over the rest of their guide syllable. */
-export default function GlyphTile({ glyph, settings: s, adjust: a, className }: { glyph: GlyphRec; settings: Settings; adjust: GlyphAdjust; className?: string }) {
+export default function GlyphTile({ glyph, settings: s, adjust: a, auto = 0, className }: Props) {
   if (isJamoKey(glyph.char)) {
     const cell = jamoCell(glyph.char)
     const [x0, y0, x1, y1] = bounds(glyph.outlines)
@@ -23,7 +25,7 @@ export default function GlyphTile({ glyph, settings: s, adjust: a, className }: 
       </svg>
     )
   }
-  const laid = layoutGlyph(glyph, s, a)
+  const laid = layoutGlyph(glyph, s, a, auto)
   return (
     <svg viewBox={`${laid.advance / 2 - 520} -950 1040 1300`} className={className} aria-hidden="true">
       <line x1={laid.advance / 2 - 520} x2={laid.advance / 2 + 520} y1={0} y2={0} className="baseline" />
