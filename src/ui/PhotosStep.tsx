@@ -3,6 +3,7 @@ import type { Counts, Update } from '../App.tsx'
 import { request, warmup } from '../engine.ts'
 import { refit } from '../fit.ts'
 import { photoTooSoft } from '../core/geometry.ts'
+import { isPdf, openPdf, type OpenPdf } from '../pdf.ts'
 import type { GlyphRec } from '../project.ts'
 
 export type PhotoItem = {
@@ -63,7 +64,7 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
 
   const patch = (id: number, p: Partial<PhotoItem>) => setPhotos((list) => list.map((x) => (x.id === id ? { ...x, ...p } : x)))
 
-  async function handle(file: File) {
+  async function handlePhoto(file: File) {
     const id = ++photoId
     setPhotos((list) => [{ id, name: file.name, thumb: URL.createObjectURL(file), status: 'working' }, ...list])
     let bitmap: ImageBitmap
@@ -73,6 +74,44 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
       patch(id, { status: 'error', message: '이 사진 형식은 이 브라우저에서 열 수 없어요(HEIC 등). JPG로 바꾸거나 아이폰이라면 사파리에서 올려 주세요.' })
       return
     }
+    await scan(id, bitmap)
+  }
+
+  /** Every page of a PDF goes through the scanner like a photo. */
+  async function handlePdf(file: File) {
+    let pdf: OpenPdf
+    try {
+      pdf = await openPdf(file)
+    } catch (err) {
+      const locked = err instanceof Error && err.name === 'PasswordException'
+      setPhotos((list) => [{
+        id: ++photoId, name: file.name, thumb: '', status: 'error',
+        message: locked ? '암호가 걸린 PDF예요. 암호를 풀어서 저장한 뒤 올려 주세요.' : 'PDF를 열지 못했어요. 파일이 깨졌거나 다른 형식일 수 있어요.',
+      }, ...list])
+      return
+    }
+    try {
+      for (let n = 1; n <= pdf.pages; n++) {
+        const id = ++photoId
+        const name = pdf.pages > 1 ? `${file.name} · ${n}/${pdf.pages}쪽` : file.name
+        setPhotos((list) => [{ id, name, thumb: '', status: 'working' }, ...list])
+        let page: Awaited<ReturnType<OpenPdf['render']>>
+        try {
+          page = await pdf.render(n)
+        } catch {
+          patch(id, { status: 'error', message: '이 쪽을 그리지 못했어요. 이 쪽만 사진으로 찍어 올려 주세요.' })
+          continue
+        }
+        patch(id, { thumb: page.thumb })
+        await scan(id, page.bitmap)
+      }
+    } finally {
+      pdf.close()
+    }
+  }
+
+  /** Scan one page image and add what was read to the project. */
+  async function scan(id: number, bitmap: ImageBitmap) {
     try {
       const res = await request({ t: 'scan', bitmap, weight }, [bitmap], (done) => patch(id, { progress: done }))
       if (res.t !== 'scanned') throw new Error('unexpected reply')
@@ -94,13 +133,16 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
 
   async function handleFiles(files: FileList | null) {
     if (!files) return
-    for (const f of Array.from(files)) if (f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name)) await handle(f)
+    for (const f of Array.from(files)) {
+      if (isPdf(f)) await handlePdf(f)
+      else if (f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name)) await handlePhoto(f)
+    }
   }
 
   return (
     <section className="panel" aria-labelledby="p-h">
       <h2 id="p-h">사진 올리기</h2>
-      <p className="lead">다 쓴 템플릿을 한 쪽씩 찍어서 올려 주세요. 여러 장을 한꺼번에 올려도 되고, 순서는 상관없어요.</p>
+      <p className="lead">다 쓴 템플릿을 한 쪽씩 찍어서 올려 주세요. 스캔하거나 사진을 묶은 PDF도 돼요(여러 쪽이면 쪽마다 읽어요). 여러 개를 한꺼번에 올려도 되고, 순서는 상관없어요.</p>
 
       <div
         className={`drop${dragging ? ' over' : ''}`}
@@ -109,11 +151,11 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
         onDrop={(e) => { e.preventDefault(); setDragging(false); void handleFiles(e.dataTransfer.files) }}
       >
         <div className="drop-actions">
-          <button type="button" className="primary" onClick={() => pick.current?.click()}>사진 고르기</button>
+          <button type="button" className="primary" onClick={() => pick.current?.click()}>사진·PDF 고르기</button>
           <button type="button" className="secondary camera" onClick={() => camera.current?.click()}>카메라로 찍기</button>
         </div>
-        <p className="hint">여기에 사진을 끌어다 놓아도 돼요. 그림자 없이 위에서 찍어 주세요. 작은 칸 템플릿은 위·아래 반씩 가까이 찍어 올려도 돼요(가운데 양쪽 표식이 보이게).</p>
-        <input ref={pick} id="photo-input" type="file" accept="image/*,.heic,.heif" multiple hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = '' }} />
+        <p className="hint">여기에 사진이나 PDF를 끌어다 놓아도 돼요. 그림자 없이 위에서 찍어 주세요. 작은 칸 템플릿은 위·아래 반씩 가까이 찍어 올려도 돼요(가운데 양쪽 표식이 보이게).</p>
+        <input ref={pick} id="photo-input" type="file" accept="image/*,.heic,.heif,application/pdf,.pdf" multiple hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = '' }} />
         <input ref={camera} id="camera-input" type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = '' }} />
       </div>
 
@@ -121,7 +163,7 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
         <ul className="photos" aria-live="polite">
           {photos.map((p) => (
             <li key={p.id} className={`photo ${p.status}`}>
-              <img src={p.thumb} alt="" width={72} height={96} />
+              {p.thumb ? <img src={p.thumb} alt="" width={72} height={96} /> : <span className="photo-ph" aria-hidden="true" />}
               <div className="photo-body">
                 <div className="photo-name">{p.name}</div>
                 {p.status === 'working' && (
@@ -146,7 +188,9 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
                         ? <div className="hint">이 사진에 칸 {p.total}/{p.pageCells}개가 보였어요. 아직 안 찍힌 {missing}칸은 나머지 부분을 찍어 올려 주세요.</div>
                         : <div className="hint">다른 사진과 합쳐 이 쪽의 {p.pageCells}칸이 모두 모였어요.</div>
                     })()}
-                    {p.empties && p.empties.length > 0 && (
+                    {p.found === 0 ? (
+                      <div className="hint warn">글씨를 하나도 찾지 못했어요. 아직 안 쓴 템플릿이거나 펜이 너무 연하면 이래요. 검은 펜으로 쓴 쪽을 올려 주세요.</div>
+                    ) : p.empties && p.empties.length > 0 && (
                       <div className="hint">비어 있는 칸 {p.empties.length}개{p.empties.length <= 20 ? `: ${p.empties.map((c) => (c.startsWith('j:') ? '자모' : c)).join(' ')}` : ''}</div>
                     )}
                     {p.check && (

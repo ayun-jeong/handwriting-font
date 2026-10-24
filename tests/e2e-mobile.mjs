@@ -14,7 +14,8 @@ await clickText('사진 올리기')
 const input = await page.$('#photo-input')
 const files = process.argv.slice(5).length ? process.argv.slice(5) : ['latin_medium.jpg', 'hangul_medium.jpg']
 await input.uploadFile(...files.map((f) => path.join(photosDir, f)))
-await page.waitForFunction((n) => document.querySelectorAll('.photo.done, .photo.error').length >= n, { timeout: 180000 }, files.length)
+// a PDF adds one item per page, so wait until nothing is still being read
+await page.waitForFunction((n) => document.querySelectorAll('.photo').length >= n && !document.querySelector('.photo.working'), { timeout: 180000, polling: 300 }, files.length)
 await page.screenshot({ path: path.join(out, 'm2.png'), fullPage: true })
 await clickText('다듬기 →')
 await page.waitForFunction(() => getComputedStyle(document.querySelector('.preview-render')).fontFamily.includes('HandPreview'), { timeout: 20000 })

@@ -41,6 +41,12 @@ const MAX_SIDE = 5000
 const BG_SCALE = 4
 export const OVERVIEW = 0.5
 const SEARCH_MM = 1.4
+/**
+ * Darkness (green channel, relative to the paper) that only pen ink reaches. The printed guides peak at about
+ * 0.31 (Latin baseline in a clean PDF render) and 0.27 in sharpened photos; pen strokes reach 0.5-0.9.
+ * Without this floor a blank or nearly blank page would take its guides for ink.
+ */
+const MIN_INK = 0.4
 
 type M3 = number[] // row-major 3×3
 
@@ -296,7 +302,8 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
       crops.set(i, d)
       const ink: number[] = []
       for (const v of d) if (v > 0.12) ink.push(v)
-      if (ink.length > 150) levels.push(percentile(ink, 95))
+      const level = ink.length > 150 ? percentile(ink, 95) : 0
+      if (level >= MIN_INK) levels.push(level)
     }
     // ink level of this page: typical darkness of written strokes (pen colour, exposure)
     const ink = levels.length ? median(levels) : 0.8
@@ -324,7 +331,7 @@ export const UPSAMPLE = 2
 export function extractMask(cv: CV, crop: Uint8Array, ink: number, weight = 0): Uint8Array | null {
   const S = UPSAMPLE, W = CROP * S
   const candT = Math.max(0.12, 0.3 * ink)
-  const seedT = Math.max(0.2, 0.55 * ink)
+  const seedT = Math.max(MIN_INK, 0.55 * ink)
   const m8 = cv.matFromArray(CROP, CROP, cv.CV_8UC1, crop)
   const f = new cv.Mat(), up = new cv.Mat(), bin = new cv.Mat(), labels = new cv.Mat(), stats = new cv.Mat(), cents = new cv.Mat()
   try {

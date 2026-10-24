@@ -6,6 +6,7 @@
 
 - 사진 처리부터 폰트 생성까지 전부 브라우저 안(Web Worker)에서 한다. 서버, 계정, 방문 분석이 없다.
 - 템플릿 칸의 위치가 곧 글자라서 OCR을 쓰지 않는다. ArUco 표식으로 원근을 펴고, QR로 쪽을 알고, 칸마다 테두리를 다시 찾아 종이 휨을 보정한다. 칸은 사진에서 바로 처리 해상도(칸 하나 224px)로 잘라 읽는다.
+- 사진 대신 PDF도 올릴 수 있다(스캔 앱·스캐너, 사진을 묶은 PDF, 태블릿으로 템플릿 PDF에 직접 쓴 것). pdf.js로 쪽마다 그려서 사진과 같은 처리를 한다. pdf.js는 PDF를 고를 때만 불러온다.
 - 칸 크기 세 가지: 작게(5mm, 기본, 정성 세트가 한 장) · 보통(9.5mm) · 크게(19mm). 작은 칸은 가운데 양쪽 표식과 QR이 하나 더 있어 위·아래 반씩 찍어 올려도 된다. 칸이 사진에서 너무 작거나 흐리면(표식 가장자리로 흐림을 잰다) 다시 찍으라고 알려 준다.
 - 한글은 자모 2쪽(157칸)만 쓰면 11,172자를 전부 조합한다. 자모 칸에는 쓸 부분만 진하게 그린 안내가 있어 그 위치에 따라 쓰고, 안 쓴 변형(예: 곽의 ㄱ)은 가장 가까운 자모를 위치에 맞게 옮겨 만든다. 직접 쓴 글자가 있으면 그게 우선이다.
 - 템플릿 세트: 빠른(자모만) · 표준(+자주 쓰는 240자) · 정성(+480자, 기본) · 장인(+1,040자). 모든 세트에 영문·숫자·기호 80칸과 특수문자 80칸(♥ ★ → ㅋㅋ ㅠㅠ 「」 ₩ ℃ 등)이 들어간다.
@@ -38,12 +39,13 @@ npm run build
 | `src/core/layout.ts` | 사용자 조절값 적용 (미리보기와 내보내기가 같이 쓴다) |
 | `src/core/font.ts`, `sfnt.ts` | TTF·OTF·WOFF2 만들기, name 테이블 직접 쓰기 |
 | `src/worker/` | 무거운 처리를 맡는 Web Worker |
+| `src/pdf.ts` | PDF 쪽 → 이미지 (pdf.js, 필요할 때만 불러옴) |
 | `src/ui/` | 단계별 화면 |
-| `tests/` | Node 점검(`scan-photos.ts`, `dump-masks.ts`, `compose-check.ts`, `page-json.ts`), 로컬 Chrome으로 돌리는 E2E(`e2e-*.mjs`) |
+| `tests/` | Node 점검(`scan-photos.ts`, `dump-masks.ts`, `compose-check.ts`, `page-json.ts`, 시험용 PDF 만들기 `make-pdf.ts`), 로컬 Chrome으로 돌리는 E2E(`e2e-*.mjs`) |
 
 ## 출처와 라이선스
 
 - 한글 빈도순: 국립국어원 「현대 국어 사용 빈도 조사 2」(2005) 음절 통계
-- 사용한 오픈소스: OpenCV.js(Apache-2.0), fonteditor-core(MIT), opentype.js(MIT), fit-curve(MIT), pdf-lib(MIT), qrcode-generator(MIT), idb-keyval(Apache-2.0), React(MIT)
+- 사용한 오픈소스: OpenCV.js(Apache-2.0), fonteditor-core(MIT), opentype.js(MIT), fit-curve(MIT), pdf-lib(MIT), pdf.js(Apache-2.0; 함께 배포하는 wasm: OpenJPEG BSD-2-Clause, PDFium JBIG2 BSD-3-Clause, qcms MIT — 라이선스 전문은 사이트의 `pdfjs/LICENSE_*.txt`), qrcode-generator(MIT), idb-keyval(Apache-2.0), React(MIT)
 - 자모 안내 모양: Pretendard (SIL OFL 1.1, © Kil Hyung-jin)
 - 이 저장소의 코드는 오픈소스 라이선스로 배포하지 않는다. © 2026 ayun-jeong. All rights reserved.

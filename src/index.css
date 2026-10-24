@@ -111,6 +111,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .photos { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.6rem; }
 .photo { display: flex; gap: 0.85rem; padding: 0.7rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
 .photo img { flex: none; width: 72px; height: 96px; object-fit: cover; border-radius: 6px; background: var(--bg); }
+.photo-ph { flex: none; width: 72px; height: 96px; border-radius: 6px; background: var(--bg); }
 .photo-body { min-width: 0; display: grid; gap: 0.2rem; align-content: start; }
 .photo-name { font-size: 0.85rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status { font-weight: 600; font-size: 0.95rem; }

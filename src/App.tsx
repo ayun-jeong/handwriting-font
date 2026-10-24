@@ -108,7 +108,7 @@ export default function App() {
           <span className="brand-cell" aria-hidden="true">손</span>
           <div>
             <h1>손글씨 폰트 만들기</h1>
-            <p className="tagline">종이에 쓴 글씨를 사진으로 찍으면 내 글씨체 폰트(TTF·OTF)가 돼요. 사진은 이 기기 밖으로 나가지 않아요.</p>
+            <p className="tagline">종이에 쓴 글씨를 사진이나 스캔(PDF)으로 올리면 내 글씨체 폰트(TTF·OTF)가 돼요. 사진과 PDF는 이 기기 밖으로 나가지 않아요.</p>
           </div>
         </div>
         <nav className="steps" aria-label="단계">

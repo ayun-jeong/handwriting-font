@@ -6,6 +6,10 @@ const LICENSES: [string, string, string][] = [
   ['opentype.js', 'MIT', 'https://github.com/opentypejs/opentype.js'],
   ['fit-curve', 'MIT', 'https://github.com/soswow/fit-curves'],
   ['pdf-lib', 'MIT', 'https://github.com/Hopding/pdf-lib'],
+  ['pdf.js', 'Apache-2.0', 'https://github.com/mozilla/pdf.js'],
+  ['OpenJPEG (pdf.js 이미지 해석)', 'BSD-2-Clause', `${import.meta.env.BASE_URL}pdfjs/LICENSE_OPENJPEG.txt`],
+  ['PDFium JBIG2 (pdf.js 이미지 해석)', 'BSD-3-Clause', `${import.meta.env.BASE_URL}pdfjs/LICENSE_JBIG2.txt`],
+  ['qcms (pdf.js 색 변환)', 'MIT', `${import.meta.env.BASE_URL}pdfjs/LICENSE_QCMS.txt`],
   ['qrcode-generator', 'MIT', 'https://github.com/kazuhikoarase/qrcode-generator'],
   ['idb-keyval', 'Apache-2.0', 'https://github.com/jakearchibald/idb-keyval'],
   ['React', 'MIT', 'https://github.com/facebook/react'],
@@ -16,7 +20,7 @@ export default function Footer({ onRestart, hasWork }: { onRestart: () => void; 
   const [asking, setAsking] = useState(false)
   return (
     <footer className="foot">
-      <p>사진과 글씨는 이 브라우저 안에서만 처리되고 저장돼요. 서버로 보내지 않고, 방문 기록도 모으지 않아요.</p>
+      <p>사진·PDF와 글씨는 이 브라우저 안에서만 처리되고 저장돼요. 서버로 보내지 않고, 방문 기록도 모으지 않아요.</p>
       {hasWork && (
         <div className="restart">
           {asking ? (
