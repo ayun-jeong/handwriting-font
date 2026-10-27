@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import type { Counts, Update } from '../App.tsx'
+import type { Stroke } from '../core/brush.ts'
 import { isJamoKey, isSyllable, jamoLabel } from '../core/compose.ts'
 import { DEFAULT_SETTINGS, NO_ADJUST, autoAlign, type Settings } from '../core/layout.ts'
+import { request } from '../engine.ts'
 import type { GlyphRec, Project } from '../project.ts'
 import GlyphEditor from './GlyphEditor.tsx'
 import GlyphTile from './GlyphTile.tsx'
+import type { Tool } from './ShapeCanvas.tsx'
 
 type Props = {
   project: Project
@@ -74,6 +77,8 @@ export default function AdjustStep({ project, update, family, building, counts, 
   const [size, setSize] = useState(40)
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<string | null>(null)
+  const [tool, setTool] = useState<Tool>(null)
+  const [brush, setBrush] = useState(10)
   const [showComposed, setShowComposed] = useState(false)
 
   // runs of characters: written by hand, assembled from jamo, or missing (drawn grey in the system font)
@@ -92,6 +97,18 @@ export default function AdjustStep({ project, update, family, building, counts, 
 
   // the same per-glyph line-up offsets the font build uses, so tiles show what the font will look like
   const auto = useMemo(() => autoAlign(Object.values(project.glyphs).filter((g) => !isJamoKey(g.char))), [project.glyphs])
+
+  // hand corrections: saved at once, then the glyph is re-traced with them (a newer edit wins over a late result)
+  const setStrokes = (char: string, strokes: Stroke[]) => {
+    const g = project.glyphs[char]
+    if (!g) return
+    update((p) => ({ ...p, glyphs: { ...p.glyphs, [char]: { ...p.glyphs[char], strokes } } }))
+    void request({ t: 'retrace', weight: project.tracedWeight, items: [{ key: char, kind: g.kind, crop: g.crop, ink: g.ink, strokes }] }).then((res) => {
+      if (res.t !== 'retraced') return
+      const outlines = res.items[0]?.outlines ?? []
+      update((p) => (p.glyphs[char]?.strokes === strokes ? { ...p, glyphs: { ...p.glyphs, [char]: { ...p.glyphs[char], outlines } } } : p))
+    })
+  }
 
   const s = project.settings
   const setSetting = (key: keyof Settings, v: number) => update((p) => ({ ...p, settings: { ...p.settings, [key]: v } }))
@@ -179,13 +196,13 @@ export default function AdjustStep({ project, update, family, building, counts, 
         ))}
       </div>
       <p className="hint">
-        글자를 누르면 위치·크기를 고치거나 폰트에서 뺄 수 있어요. 자모를 고치면 그 자모로 조합한 글자가 모두 함께 바뀌어요.
+        글자를 누르면 붓으로 모양을 더하거나 지우고, 위치·크기를 고치거나, 폰트에서 뺄 수 있어요. 자모를 고치면 그 자모로 조합한 글자가 모두 함께 바뀌어요.
         마음에 안 드는 글자는 템플릿 그 쪽만 다시 써서 올리면 새 글씨로 바뀌어요.
       </p>
       <ul className="grid">
         {list.map((g) => {
           const adj = project.adjust[g.char] ?? NO_ADJUST
-          const changed = adj.dx || adj.dy || adj.scale !== 1
+          const changed = adj.dx || adj.dy || adj.scale !== 1 || !!g.strokes?.length
           const jamo = isJamoKey(g.char)
           return (
             <li key={g.char}>
@@ -206,15 +223,22 @@ export default function AdjustStep({ project, update, family, building, counts, 
 
       {editing && project.glyphs[editing] && (
         <GlyphEditor
+          key={editing}
           glyph={project.glyphs[editing]}
           order={list.map((g) => g.char)}
           settings={s}
           adjust={project.adjust[editing] ?? NO_ADJUST}
           auto={auto.get(editing) ?? 0}
+          weight={project.tracedWeight}
           family={family}
+          tool={tool}
+          setTool={setTool}
+          brush={brush}
+          setBrush={setBrush}
           onChange={(a) => update((p) => ({ ...p, adjust: { ...p.adjust, [editing]: a } }))}
+          onStrokes={(st) => setStrokes(editing, st)}
           onGo={setEditing}
-          onClose={() => setEditing(null)}
+          onClose={() => { setEditing(null); setTool(null) }}
         />
       )}
     </section>

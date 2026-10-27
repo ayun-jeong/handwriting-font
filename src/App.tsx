@@ -57,13 +57,14 @@ export default function App() {
     const t = setTimeout(async () => {
       setReweighing(true)
       try {
-        const items = Object.values(glyphs).map((g) => ({ key: g.char, kind: g.kind, crop: g.crop, ink: g.ink }))
+        const items = Object.values(glyphs).map((g) => ({ key: g.char, kind: g.kind, crop: g.crop, ink: g.ink, strokes: g.strokes }))
         const res = await request({ t: 'retrace', weight, items })
         if (cancelled || res.t !== 'retraced') return
         const outlines = new Map(res.items.map((i) => [i.key, i.outlines]))
         setProject((p) => {
           const next = { ...p.glyphs }
-          for (const [k, o] of outlines) if (next[k] && o.length) next[k] = { ...next[k], outlines: o }
+          // an empty result keeps the old shape, unless the user erased the glyph on purpose
+          for (const [k, o] of outlines) if (next[k] && (o.length || next[k].strokes?.length)) next[k] = { ...next[k], outlines: o }
           return { ...p, glyphs: next, tracedWeight: weight }
         })
       } finally {

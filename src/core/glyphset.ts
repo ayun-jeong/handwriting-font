@@ -53,7 +53,7 @@ export function buildGlyphSet(sources: SourceGlyph[], s: Settings, adjust: Recor
   const plain: SourceGlyph[] = []
   for (const g of sources) {
     const a = adjust[g.key] ?? NO_ADJUST
-    if (a.off) continue
+    if (a.off || !g.outlines.length) continue // erased completely in the editor: as if never written
     if (isJamoKey(g.key)) pieces.set(g.key, adjustPiece(g.outlines, a))
     else plain.push(g)
   }
@@ -114,7 +114,7 @@ export function availableChars(sources: SourceGlyph[], adjust: Record<string, Gl
   const written = new Set<string>()
   const pieces = new Map<string, Outline[]>()
   for (const g of sources) {
-    if (adjust[g.key]?.off) continue
+    if (adjust[g.key]?.off || !g.outlines.length) continue
     if (isJamoKey(g.key)) pieces.set(g.key, g.outlines)
     else written.add(g.key)
   }
@@ -129,7 +129,7 @@ export function availableChars(sources: SourceGlyph[], adjust: Record<string, Gl
 /** Raw (unadjusted) assembled outlines for the given syllables, where the jamo allow it. */
 export function assembledOutlines(sources: SourceGlyph[], chars: string[]): Outline[][] {
   const pieces = new Map<string, Outline[]>()
-  for (const g of sources) if (isJamoKey(g.key)) pieces.set(g.key, g.outlines)
+  for (const g of sources) if (isJamoKey(g.key) && g.outlines.length) pieces.set(g.key, g.outlines)
   if (!pieces.size) return []
   const variants = resolveVariants(pieces)
   const out: Outline[][] = []

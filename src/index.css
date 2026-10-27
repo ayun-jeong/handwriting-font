@@ -166,7 +166,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .dialog-head h3 { margin: 0; }
 .dialog-nav { display: flex; align-items: center; gap: 0.3rem; }
 .dialog-nav .ghost { padding: 0.35rem 0.7rem; }
-.editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+.editor { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 0.7rem; align-items: start; }
+@media (max-width: 520px) { .editor { grid-template-columns: minmax(0, 1fr); } .editor figure:last-child { max-width: 13rem; } }
+.shape-canvas { width: 100%; height: auto; aspect-ratio: 1; display: block; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.shape-canvas.draw, .shape-canvas.erase { cursor: crosshair; border-color: var(--guide); box-shadow: 0 0 0 2px var(--guide-wash); }
+.brush { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+.brush input[type="range"] { flex: 1 1 6rem; min-width: 5rem; accent-color: var(--guide); }
+.brush-size { font-size: 0.9rem; }
+.ghost.small { padding: 0.35rem 0.7rem; font-size: 0.86rem; }
 .editor figure { margin: 0; }
 .editor figcaption { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; }
 .crop { width: 100%; aspect-ratio: 1; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: block; }

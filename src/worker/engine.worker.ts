@@ -1,9 +1,10 @@
 /// <reference lib="webworker" />
 // Heavy lifting off the main thread: OpenCV.js (13 MB) is loaded here on first use.
 import cvModule from '@techstark/opencv-js'
+import { paintStrokes } from '../core/brush.ts'
 import type { CV } from '../core/cv.ts'
-import { LAYOUTS, type LayoutId } from '../core/geometry.ts'
-import { OVERVIEW, extractMask, maskToOutlines, scanPage, traceCells, type RGBAImage } from '../core/pipeline.ts'
+import { CROP, LAYOUTS, type LayoutId } from '../core/geometry.ts'
+import { OVERVIEW, UPSAMPLE, extractMask, maskToOutlines, scanPage, traceCells, type RGBAImage } from '../core/pipeline.ts'
 import type { EngineRequest, EngineResponse, ScannedGlyph } from './protocol.ts'
 
 declare const self: DedicatedWorkerGlobalScope
@@ -92,11 +93,20 @@ self.onmessage = async (e: MessageEvent<EngineRequest>) => {
       return
     }
     if (msg.t === 'retrace') {
+      const W = CROP * UPSAMPLE
       const items = msg.items.map((it) => {
-        const mask = extractMask(cv, it.crop, it.ink, msg.weight)
-        return { key: it.key, outlines: mask ? maskToOutlines(cv, mask, it.kind) : [] }
+        let mask = extractMask(cv, it.crop, it.ink, msg.weight)
+        if (it.strokes?.length) {
+          mask ??= new Uint8Array(W * W)
+          paintStrokes(mask, W, it.strokes)
+        }
+        return { key: it.key, outlines: mask?.some((v) => v) ? maskToOutlines(cv, mask, it.kind) : [] }
       })
       post({ t: 'retraced', id: msg.id, items })
+    }
+    if (msg.t === 'mask') {
+      const mask = extractMask(cv, msg.crop, msg.ink, msg.weight)
+      post({ t: 'masked', id: msg.id, mask, w: CROP * UPSAMPLE }, mask ? [mask.buffer as ArrayBuffer] : [])
     }
   } catch (err) {
     post({ t: 'error', id: msg.id, message: err instanceof Error ? err.message : String(err) })

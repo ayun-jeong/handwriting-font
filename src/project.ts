@@ -1,6 +1,7 @@
 // Everything the user made, kept in this browser's IndexedDB only (never sent anywhere).
 import { del, get, set } from 'idb-keyval'
 import type { Embedding } from './core/font.ts'
+import type { Stroke } from './core/brush.ts'
 import { isJamoKey } from './core/compose.ts'
 import type { Kind } from './core/geometry.ts'
 import { DEFAULT_SETTINGS, autoAlign, type GlyphAdjust, type Settings } from './core/layout.ts'
@@ -15,6 +16,8 @@ export type GlyphRec = {
   ink: number
   outlines: Outline[]
   page: string
+  /** Hand corrections painted in the glyph editor, applied over the scanned ink on every re-trace. */
+  strokes?: Stroke[]
 }
 
 export type Project = {
