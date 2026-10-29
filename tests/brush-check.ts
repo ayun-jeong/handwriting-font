@@ -23,7 +23,7 @@ const cell = scan.cells.find((c) => c.char === ch)
 if (!cell) throw new Error(`no cell ${ch}`)
 const W = CROP * UPSAMPLE
 const trace = (strokes: Stroke[]) => {
-  let mask = extractMask(cv, cell.crop, scan.ink, 0)
+  let mask = extractMask(cv, cell.crop, scan.ink, 0, scan.guide)
   if (strokes.length) { mask ??= new Uint8Array(W * W); paintStrokes(mask, W, strokes) }
   return mask?.some((v) => v) ? maskToOutlines(cv, mask, cell.kind) : []
 }

@@ -12,8 +12,9 @@ export type GlyphRec = {
   kind: Kind
   /** Green-channel darkness of the cell, kept for re-tracing at another weight. */
   crop: Uint8Array
-  /** Ink level of the page it came from. */
+  /** Ink level of the page it came from, and how dark its printed guides came out. */
   ink: number
+  guide?: number
   outlines: Outline[]
   page: string
   /** Hand corrections painted in the glyph editor, applied over the scanned ink on every re-trace. */

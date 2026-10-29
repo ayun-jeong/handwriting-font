@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { Counts, Update } from '../App.tsx'
 import { request, warmup } from '../engine.ts'
 import { refit } from '../fit.ts'
-import { photoTooSoft } from '../core/geometry.ts'
+import { GUIDE_LIKE_INK, photoTooSoft } from '../core/geometry.ts'
 import { isPdf, openPdf, type OpenPdf } from '../pdf.ts'
 import type { GlyphRec } from '../project.ts'
 
@@ -25,6 +25,8 @@ export type PhotoItem = {
   /** Photo pixels across one cell, and the photo's blur in photo pixels. */
   cellPx?: number
   blurPx?: number
+  /** How dark the printed guides came out. */
+  guide?: number
   empties?: string[]
   check?: string
 }
@@ -120,11 +122,11 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
         return
       }
       const add: Record<string, GlyphRec> = {}
-      for (const g of res.glyphs) add[g.char] = { char: g.char, kind: g.kind, crop: g.crop, ink: res.ink, outlines: g.outlines, page: res.page.id }
+      for (const g of res.glyphs) add[g.char] = { char: g.char, kind: g.kind, crop: g.crop, ink: res.ink, guide: res.guide, outlines: g.outlines, page: res.page.id }
       update((p) => refit({ ...p, glyphs: { ...p.glyphs, ...add } }))
       patch(id, {
         status: 'done', pageTitle: res.page.title, pageId: res.page.id, seen: res.seen, found: res.glyphs.length, total: res.visible, pageCells: res.total,
-        cellPx: res.cellPx, blurPx: res.blurPx, empties: res.empties, check: URL.createObjectURL(res.check),
+        cellPx: res.cellPx, blurPx: res.blurPx, guide: res.guide, empties: res.empties, check: URL.createObjectURL(res.check),
       })
     } catch (err) {
       patch(id, { status: 'error', message: `처리하다 문제가 생겼어요: ${err instanceof Error ? err.message : err}` })
@@ -181,6 +183,9 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
                           ? `사진 속 칸이 작아서(칸 하나가 ${p.cellPx}픽셀) 획이 굵게 뭉개질 수 있어요. 종이에 더 가까이, 위·아래 반씩 나눠 찍어 보세요.`
                           : '사진이 조금 흐려서 획이 굵게 뭉개질 수 있어요. 초점을 맞추고 흔들리지 않게 다시 찍어 보세요.'}
                       </div>
+                    )}
+                    {p.guide !== undefined && p.guide >= GUIDE_LIKE_INK && (
+                      <div className="hint warn">하늘색 안내선이 글씨만큼 진하게 찍혔어요(흑백 스캔이면 이래요). 안내선이 글자에 섞일 수 있으니 컬러나 회색조로 다시 스캔해 주세요. 남은 선은 다듬기에서 붓으로 지울 수도 있어요.</div>
                     )}
                     {p.pageCells !== undefined && p.total !== undefined && p.total < p.pageCells && (() => {
                       const missing = p.pageCells - (covered.get(p.pageId!)?.size ?? p.total)

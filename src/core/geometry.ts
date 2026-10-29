@@ -97,6 +97,15 @@ export const LAYOUTS: Record<LayoutId, Layout> = {
   S: { id: 'S', name: '작게', boxMm: 5, box: 5 * MM, pitch: 7.7 * MM, labelMm: 1.9, renderDpi: 400, mid: true, slots: gridSlots(5, 1.4, 2.2, 0.5) },
 }
 
+/**
+ * Guide level (see the scanner's guideLevel) above which the printed guides came out as dark as ink, as in
+ * black-and-white scans: they can no longer be told apart from the writing by darkness.
+ */
+export const GUIDE_LIKE_INK = 0.85
+
+/** Width of the printed box border (canonical px); the template draws it and the scanner measures it. */
+export const borderWidth = (lay: Layout) => (lay.id === 'L' ? 3 : Math.max(1.2, lay.box * 0.02))
+
 /** Crop pixel (processing scale, relative to the inset crop) -> font units. */
 export function cropToFont(kind: Kind, x: number, y: number): Pt {
   const k = KIND[kind]

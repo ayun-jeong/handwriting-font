@@ -88,14 +88,14 @@ self.onmessage = async (e: MessageEvent<EngineRequest>) => {
         t: 'scanned', id: msg.id, ok: true,
         page: { id: scan.page.id, title: scan.page.title, layout: scan.page.layout },
         ink: scan.ink, glyphs: out, empties: empties.map((c) => c.char), check,
-        visible: scan.cells.length, total: scan.visible.length, seen: scan.cells.map((c) => c.index), cellPx: Math.round(scan.cellPx), blurPx: Math.round(scan.blurPx * 100) / 100,
+        visible: scan.cells.length, total: scan.visible.length, seen: scan.cells.map((c) => c.index), cellPx: Math.round(scan.cellPx), blurPx: Math.round(scan.blurPx * 100) / 100, guide: Math.round(scan.guide * 100) / 100,
       }, out.map((g) => g.crop.buffer as ArrayBuffer))
       return
     }
     if (msg.t === 'retrace') {
       const W = CROP * UPSAMPLE
       const items = msg.items.map((it) => {
-        let mask = extractMask(cv, it.crop, it.ink, msg.weight)
+        let mask = extractMask(cv, it.crop, it.ink, msg.weight, it.guide)
         if (it.strokes?.length) {
           mask ??= new Uint8Array(W * W)
           paintStrokes(mask, W, it.strokes)
@@ -105,7 +105,7 @@ self.onmessage = async (e: MessageEvent<EngineRequest>) => {
       post({ t: 'retraced', id: msg.id, items })
     }
     if (msg.t === 'mask') {
-      const mask = extractMask(cv, msg.crop, msg.ink, msg.weight)
+      const mask = extractMask(cv, msg.crop, msg.ink, msg.weight, msg.guide)
       post({ t: 'masked', id: msg.id, mask, w: CROP * UPSAMPLE }, mask ? [mask.buffer as ArrayBuffer] : [])
     }
   } catch (err) {

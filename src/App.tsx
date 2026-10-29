@@ -57,7 +57,7 @@ export default function App() {
     const t = setTimeout(async () => {
       setReweighing(true)
       try {
-        const items = Object.values(glyphs).map((g) => ({ key: g.char, kind: g.kind, crop: g.crop, ink: g.ink, strokes: g.strokes }))
+        const items = Object.values(glyphs).map((g) => ({ key: g.char, kind: g.kind, crop: g.crop, ink: g.ink, guide: g.guide, strokes: g.strokes }))
         const res = await request({ t: 'retrace', weight, items })
         if (cancelled || res.t !== 'retraced') return
         const outlines = new Map(res.items.map((i) => [i.key, i.outlines]))

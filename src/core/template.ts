@@ -4,16 +4,18 @@ import { PDFDocument } from 'pdf-lib'
 import aruco from './data/aruco4x4.json' with { type: 'json' }
 import type { PageDef } from './charsets.ts'
 import { isJamoKey, jamoCell } from './compose.ts'
-import { KIND, LAYOUTS, MARK, MID_QR_SIZE, MID_QR_X, MID_QR_Y, MID_Y, MM, PAGE_H, PAGE_W, QR_SIZE, QR_X, QR_Y, markerPos } from './geometry.ts'
+import { KIND, LAYOUTS, MARK, MID_QR_SIZE, MID_QR_X, MID_QR_Y, MID_Y, MM, PAGE_H, PAGE_W, QR_SIZE, QR_X, QR_Y, borderWidth, markerPos } from './geometry.ts'
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
+// The box border is the darkest guide: the scanner finds the cells by it and measures how dark the guides came out.
 const GUIDE = 'rgb(110,185,235)'
-const GUIDE_LIGHT = 'rgb(165,212,242)'
-// Trace guides for jamo cells: the part to write, and the rest of the syllable for context. Both are light
-// enough to drop out of the scan, even printed in black and white.
-const TRACE = 'rgb(160,208,240)'
-const CONTEXT = 'rgb(224,239,249)'
+// Everything printed inside a cell is lighter, so that scan apps' contrast boost doesn't turn it into ink.
+const BASELINE = 'rgb(150,205,240)'
+const GUIDE_LIGHT = 'rgb(188,224,246)'
+// Trace guides for jamo cells: the part to write, and the rest of the syllable for context.
+const TRACE = 'rgb(176,218,245)'
+const CONTEXT = 'rgb(232,243,251)'
 const FONT = '"Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif'
 
 function dashed(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, width: number, dash: number) {
@@ -108,7 +110,7 @@ export function drawTemplatePage(ctx: Ctx, page: PageDef, no: number, total: num
     ctx.textAlign = 'left'
   }
 
-  const lineW = dense ? Math.max(1.2, box * 0.02) : 3
+  const lineW = borderWidth(lay)
   const dash = box * 0.045
   ctx.font = `400 ${Math.round(lay.labelMm * MM)}px ${FONT}`
   page.chars.forEach((ch, i) => {
@@ -147,7 +149,7 @@ export function drawTemplatePage(ctx: Ctx, page: PageDef, no: number, total: num
     } else {
       const k = KIND.latin
       const yb = y + (box * k.TOP) / k.U
-      ctx.strokeStyle = GUIDE
+      ctx.strokeStyle = BASELINE
       ctx.lineWidth = lineW
       ctx.beginPath(); ctx.moveTo(x + lineW, yb); ctx.lineTo(x + box - lineW, yb); ctx.stroke()
       for (const units of [480, 700]) {

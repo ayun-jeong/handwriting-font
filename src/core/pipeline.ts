@@ -4,10 +4,11 @@
 // the photo has. Borders are re-registered per cell (paper curl), ink is read from the green channel with
 // page-adaptive thresholds.
 import { pageFromQr, type PageDef } from './charsets.ts'
+import { isJamoKey } from './compose.ts'
 import type { CV } from './cv.ts'
 import {
   BOX, CROP, INSET, LAYOUTS, MID_QR_SIZE, MID_QR_X, MID_QR_Y, MM, PAGE_H, PAGE_W, QR_SIZE, QR_X, QR_Y,
-  cropToFont, markerCorners, type Kind, type Layout, type Pt,
+  GUIDE_LIKE_INK, KIND, borderWidth, cropToFont, markerCorners, type Kind, type Layout, type Pt,
 } from './geometry.ts'
 import { mapOutlines, traceMask, type Outline } from './tracer.ts'
 
@@ -34,6 +35,11 @@ export type PageScan =
       cellPx: number
       /** Blur of the photo (Gaussian sigma in photo pixels), measured on the edges of the markers. */
       blurPx: number
+      /**
+       * Darkness of the printed box borders as they came out in this photo or scan (see guideLevel). Ink must be
+       * darker than this; scan apps' "document" clean-up can make the light-blue guides nearly as dark as a pen.
+       */
+      guide: number
     }
   | { ok: false; reason: 'markers' | 'qr' | 'page'; markers: number[]; qr?: string }
 
@@ -86,14 +92,30 @@ function bgAt(bg: Uint8Array, w: number, h: number, x: number, y: number, ch: nu
 
 type Bg = { data: Uint8Array; w: number; h: number }
 
-/** Darkness (0..1) of channel `ch` of a window, normalised by the local paper colour. */
-function darkness(win: Uint8Array, size: number, bg: Bg, ox: number, oy: number, s: number, ch: number): Float32Array {
-  const out = new Float32Array(size * size)
-  for (let v = 0; v < size; v++) {
+/**
+ * Ink is dark in green and in blue; the template's light-blue guides are dark only in green (and red). Counting
+ * blue darkness plus this much keeps the guides out in any colour photo or scan, while black, blue or red pens
+ * still read as ink.
+ */
+const BLUE_SLACK = 0.15
+
+/**
+ * Darkness (0..1) of a `w`×`h` window, normalised by the local paper colour: channel `ch`, or 'ink' for the
+ * green-or-blue measure above.
+ */
+function darkness(win: Uint8Array, w: number, h: number, bg: Bg, ox: number, oy: number, s: number, ch: number | 'ink'): Float32Array {
+  const out = new Float32Array(w * h)
+  for (let v = 0; v < h; v++) {
     const cy = oy + (v + 0.5) / s
-    for (let u = 0; u < size; u++) {
-      const b = Math.max(bgAt(bg.data, bg.w, bg.h, ox + (u + 0.5) / s, cy, ch), 1)
-      out[v * size + u] = 1 - Math.min(win[(v * size + u) * 4 + ch] / b, 1)
+    for (let u = 0; u < w; u++) {
+      const cx = ox + (u + 0.5) / s, i = (v * w + u) * 4
+      if (ch === 'ink') {
+        const g = 1 - Math.min(win[i + 1] / Math.max(bgAt(bg.data, bg.w, bg.h, cx, cy, 1), 1), 1)
+        const b = 1 - Math.min(win[i + 2] / Math.max(bgAt(bg.data, bg.w, bg.h, cx, cy, 2), 1), 1)
+        out[v * w + u] = Math.min(g, b + BLUE_SLACK)
+      } else {
+        out[v * w + u] = 1 - Math.min(win[i + ch] / Math.max(bgAt(bg.data, bg.w, bg.h, cx, cy, ch), 1), 1)
+      }
     }
   }
   return out
@@ -166,6 +188,34 @@ function edgeBlur(gray: Uint8Array, w: number, h: number, quads: Pt[][]): number
   return widths.length ? median(widths) / 2.563 : 0
 }
 
+/**
+ * How dark the printed guides came out: the median peak darkness (ink measure) across the bottom border of up to
+ * 120 cells. The border is printed in the darkest guide colour, at the width of the in-cell lines.
+ */
+function guideLevel(cv: CV, src: CV, H: M3, bg: Bg, lay: Layout, cells: number[], offsets: Map<number, Pt>): number {
+  const s = BOX / lay.box
+  const lw = borderWidth(lay), pad = 2
+  const w = Math.round(lay.box * 0.6 * s), h = Math.round((lw + 2 * pad) * s)
+  const step = Math.max(1, Math.floor(cells.length / 120))
+  const levels: number[] = []
+  for (let k = 0; k < cells.length; k += step) {
+    const i = cells[k]
+    const [x, y] = lay.slots[i], [dx, dy] = offsets.get(i)!
+    const ox = x + dx + lay.box * 0.2, oy = y + dy + lay.box - lw - pad
+    const win = warp(cv, src, windowOf(H, s, ox, oy), w, h, cv.INTER_LINEAR)
+    const d = darkness(win.data, w, h, bg, ox, oy, s, 'ink')
+    win.delete()
+    const peaks: number[] = []
+    for (let u = 0; u < w; u++) {
+      let m = 0
+      for (let v = 0; v < h; v++) m = Math.max(m, d[v * w + u])
+      peaks.push(m)
+    }
+    levels.push(median(peaks)) // a stroke crossing the border only moves a few columns
+  }
+  return levels.length ? median(levels) : 0
+}
+
 /** The printed border's offset from where the homography puts it, per cell (paper curl), in canonical px. */
 function registerCells(cv: CV, src: CV, H: M3, bg: Bg, lay: Layout, cells: number[]): Map<number, Pt> {
   const { slots, box } = lay
@@ -183,7 +233,7 @@ function registerCells(cv: CV, src: CV, H: M3, bg: Bg, lay: Layout, cells: numbe
     const [x, y] = slots[i]
     const ox = x - R / s, oy = y - R / s
     const win = warp(cv, src, windowOf(H, s, ox, oy), W, W, cv.INTER_LINEAR)
-    const d = darkness(win.data, W, bg, ox, oy, s, 0) // the printed border is dark in red
+    const d = darkness(win.data, W, W, bg, ox, oy, s, 0) // the printed border is dark in red
     win.delete()
     const m = cv.matFromArray(W, W, cv.CV_32F, d)
     cv.matchTemplate(m, tm, res, cv.TM_CCORR_NORMED, band)
@@ -297,7 +347,7 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
       const [dx, dy] = offsets.get(i)!
       const ox = x + dx + INSET / s, oy = y + dy + INSET / s
       const win = warp(cv, src, windowOf(H, s, ox, oy), CROP, CROP, cv.INTER_CUBIC)
-      const d = darkness(win.data, CROP, bg, ox, oy, s, 1)
+      const d = darkness(win.data, CROP, CROP, bg, ox, oy, s, 'ink')
       win.delete()
       crops.set(i, d)
       const ink: number[] = []
@@ -307,15 +357,18 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
     }
     // ink level of this page: typical darkness of written strokes (pen colour, exposure)
     const ink = levels.length ? median(levels) : 0.8
+    const guide = guideLevel(cv, src, H, bg, lay, shown, offsets)
 
     const cells: InkCell[] = shown.map((index) => {
       const d = crops.get(index)!
+      const char = page.chars[index], kind = page.kinds[index]
+      if (guide >= LINES_JOIN && guide < GUIDE_LIKE_INK) clearGuideLines(d, guideBands(lay, kind, isJamoKey(char)), ink, guide)
       const crop = new Uint8Array(d.length)
       for (let k = 0; k < d.length; k++) crop[k] = Math.round(d[k] * 255)
-      return { index, char: page.chars[index], kind: page.kinds[index], crop }
+      return { index, char, kind, crop }
     })
     const blurPx = edgeBlur(new Uint8Array(gray.data), gray.cols, gray.rows, quads)
-    return { ok: true, page, markers, ink, cells, visible, overview, cellPx, blurPx }
+    return { ok: true, page, markers, ink, cells, visible, overview, cellPx, blurPx, guide }
   } finally {
     for (const m of mats) m.delete?.()
   }
@@ -325,13 +378,58 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
 export const UPSAMPLE = 2
 
 /**
+ * Guide level from which printed lines start joining the strokes that touch them (measured on simulated scans:
+ * contrast-boosted greyscale at 0.46 joined lines to 40 of 62 Latin cells, plain photos and scans at 0.12-0.31
+ * none). Below it the lines are left alone, so strokes crossing them keep their full width.
+ */
+const LINES_JOIN = 0.28
+
+/** Lowest mask threshold for a page: above its printed guides, but no further than halfway to its ink. */
+const inkFloor = (ink: number, guide: number) => Math.min(guide + 0.12, (guide + ink) / 2)
+
+type Bands = { h: number[]; v: number[]; half: number }
+
+/** Guide lines printed inside a cell, as crop rows (`h`) and columns (`v`), each ± `half` crop pixels. */
+function guideBands(lay: Layout, kind: Kind, jamo: boolean): Bands {
+  const k = KIND[kind]
+  const row = (units: number) => (BOX * (k.TOP - units)) / k.U - INSET
+  const col = (units: number) => (BOX * units) / k.U - INSET
+  const half = (borderWidth(lay) * BOX) / lay.box / 2 + 2.5 // line half-width plus registration slack
+  if (kind === 'latin') return { h: [row(0), row(480), row(700)], v: [], half } // baseline, x-height, cap height
+  const h: number[] = [], v: number[] = []
+  if (!jamo && lay.id !== 'S') { h.push(row(810), row(-50)); v.push(col(90), col(910)) } // size frame
+  if (!jamo && lay.id === 'L') { h.push(BOX / 2 - INSET); v.push(BOX / 2 - INSET) } // centre cross
+  return { h, v, half }
+}
+
+/**
+ * On the printed guide lines, only ink-dark pixels stay: where a stroke crosses or sits on a line it is far
+ * darker than the line, but the line next to a stroke is darkened by the stroke's blur and would join it.
+ */
+function clearGuideLines(d: Float32Array, b: Bands, ink: number, guide: number): void {
+  if (!b.h.length && !b.v.length) return
+  const keep = Math.max(inkFloor(ink, guide) + 0.1, (guide + ink) / 2)
+  const near = (lines: number[], p: number) => lines.some((l) => Math.abs(p + 0.5 - l) <= b.half)
+  for (let y = 0; y < CROP; y++) {
+    const onRow = near(b.h, y)
+    for (let x = 0; x < CROP; x++) {
+      const i = y * CROP + x
+      if ((onRow || near(b.v, x)) && d[i] < keep) d[i] = Math.min(d[i], guide)
+    }
+  }
+}
+
+/**
  * Ink mask of one cell at UPSAMPLE resolution (0/255), or null if the cell is empty.
+ * `ink` and `guide` are the page's ink and printed-guide darkness; the thresholds stay between the two.
  * `weight` thickens (+) or thins (-) strokes by about one processing pixel per step.
  */
-export function extractMask(cv: CV, crop: Uint8Array, ink: number, weight = 0): Uint8Array | null {
+export function extractMask(cv: CV, crop: Uint8Array, ink: number, weight = 0, guide = 0): Uint8Array | null {
   const S = UPSAMPLE, W = CROP * S
-  const candT = Math.max(0.12, 0.3 * ink)
-  const seedT = Math.max(MIN_INK, 0.55 * ink)
+  const g = guide < GUIDE_LIKE_INK ? guide : 0
+  const floor = inkFloor(ink, g)
+  const candT = Math.max(0.12, 0.3 * ink, Math.min(g + 0.06, floor))
+  const seedT = Math.max(MIN_INK, 0.55 * ink, Math.min(g + 0.2, g + 0.75 * (ink - g)))
   const m8 = cv.matFromArray(CROP, CROP, cv.CV_8UC1, crop)
   const f = new cv.Mat(), up = new cv.Mat(), bin = new cv.Mat(), labels = new cv.Mat(), stats = new cv.Mat(), cents = new cv.Mat()
   try {
@@ -342,7 +440,7 @@ export function extractMask(cv: CV, crop: Uint8Array, ink: number, weight = 0): 
     const cand: number[] = []
     for (const v of d) if (v > candT) cand.push(v)
     if (cand.length < 60 * S * S) return null
-    const thr = Math.min(Math.max(0.5 * percentile(cand, 90), candT), 0.5)
+    const thr = Math.min(Math.max(0.5 * percentile(cand, 90), candT, floor), Math.max(0.5, floor))
     const mask = new Uint8Array(W * W)
     for (let k = 0; k < d.length; k++) mask[k] = d[k] > thr ? 255 : 0
     const mm = cv.matFromArray(W, W, cv.CV_8UC1, mask)
@@ -388,7 +486,7 @@ export function traceCells(cv: CV, scan: Extract<PageScan, { ok: true }>, weight
   const glyphs: CellGlyph[] = [], empties: InkCell[] = []
   for (const [n, cell] of scan.cells.entries()) {
     if (n % 20 === 19) progress?.(0.3 + (0.7 * n) / scan.cells.length)
-    const mask = extractMask(cv, cell.crop, scan.ink, weight)
+    const mask = extractMask(cv, cell.crop, scan.ink, weight, scan.guide)
     if (!mask) { empties.push(cell); continue }
     const outlines = maskToOutlines(cv, mask, cell.kind)
     if (outlines.length) glyphs.push({ ...cell, outlines })

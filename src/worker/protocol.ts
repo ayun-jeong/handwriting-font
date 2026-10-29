@@ -7,9 +7,9 @@ export type ScannedGlyph = { index: number; char: string; kind: Kind; crop: Uint
 export type EngineRequest =
   | { t: 'warmup'; id: number }
   | { t: 'scan'; id: number; bitmap: ImageBitmap; weight: number }
-  | { t: 'retrace'; id: number; weight: number; items: { key: string; kind: Kind; crop: Uint8Array; ink: number; strokes?: Stroke[] }[] }
+  | { t: 'retrace'; id: number; weight: number; items: { key: string; kind: Kind; crop: Uint8Array; ink: number; guide?: number; strokes?: Stroke[] }[] }
   /** The ink mask the scanner extracts from a crop (before hand corrections), for the shape editor. */
-  | { t: 'mask'; id: number; weight: number; crop: Uint8Array; ink: number }
+  | { t: 'mask'; id: number; weight: number; crop: Uint8Array; ink: number; guide?: number }
 
 export type EngineResponse =
   | { t: 'ready'; id: number }
@@ -22,6 +22,8 @@ export type EngineResponse =
       visible: number; total: number; seen: number[]
       /** Photo pixels across one cell, and the photo's blur (Gaussian sigma) in photo pixels. */
       cellPx: number; blurPx: number
+      /** How dark the printed guides came out (0..1). */
+      guide: number
     }
   | { t: 'retraced'; id: number; items: { key: string; outlines: Outline[] }[] }
   /** `w`×`w` mask (0 / 255) over the crop, or null when the scanner found no ink. */

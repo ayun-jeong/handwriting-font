@@ -43,11 +43,11 @@ export default function GlyphEditor(props: Props) {
   // the scanner's own ink mask, which the hand corrections are painted over
   useEffect(() => {
     let gone = false
-    void request({ t: 'mask', weight, crop: glyph.crop, ink: glyph.ink }).then((r) => {
+    void request({ t: 'mask', weight, crop: glyph.crop, ink: glyph.ink, guide: glyph.guide }).then((r) => {
       if (!gone && r.t === 'masked') setBase({ mask: r.mask, w: r.w })
     })
     return () => { gone = true }
-  }, [glyph.crop, glyph.ink, weight])
+  }, [glyph.crop, glyph.ink, glyph.guide, weight])
 
   const save = (s: Stroke[]) => {
     setPast((h) => [...h, strokes])

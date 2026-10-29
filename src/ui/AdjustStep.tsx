@@ -103,7 +103,7 @@ export default function AdjustStep({ project, update, family, building, counts, 
     const g = project.glyphs[char]
     if (!g) return
     update((p) => ({ ...p, glyphs: { ...p.glyphs, [char]: { ...p.glyphs[char], strokes } } }))
-    void request({ t: 'retrace', weight: project.tracedWeight, items: [{ key: char, kind: g.kind, crop: g.crop, ink: g.ink, strokes }] }).then((res) => {
+    void request({ t: 'retrace', weight: project.tracedWeight, items: [{ key: char, kind: g.kind, crop: g.crop, ink: g.ink, guide: g.guide, strokes }] }).then((res) => {
       if (res.t !== 'retraced') return
       const outlines = res.items[0]?.outlines ?? []
       update((p) => (p.glyphs[char]?.strokes === strokes ? { ...p, glyphs: { ...p.glyphs, [char]: { ...p.glyphs[char], outlines } } } : p))

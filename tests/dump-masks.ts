@@ -28,7 +28,7 @@ if (!scan.ok) {
 const W = CROP * UPSAMPLE
 const bin = new Uint8Array(scan.cells.length * CROP * CROP)
 const cells = scan.cells.map((c, n) => {
-  const m = extractMask(cv, c.crop, scan.ink)
+  const m = extractMask(cv, c.crop, scan.ink, 0, scan.guide)
   if (m) {
     for (let y = 0; y < CROP; y++) for (let x = 0; x < CROP; x++) {
       let s = 0
@@ -39,5 +39,5 @@ const cells = scan.cells.map((c, n) => {
   return { index: c.index, char: c.char, empty: !m }
 })
 fs.writeFileSync(out + '.bin', bin)
-fs.writeFileSync(out + '.json', JSON.stringify({ ok: true, page: scan.page.id, markers: scan.markers, ink: scan.ink, visible: scan.cells.length, total: scan.visible.length, ms, cells }))
-console.log(file, 'ok', scan.page.id, 'markers', scan.markers.join(''), 'visible', `${scan.cells.length}/${scan.visible.length}`, 'empty', cells.filter((c) => c.empty).length, `${ms}ms`)
+fs.writeFileSync(out + '.json', JSON.stringify({ ok: true, page: scan.page.id, markers: scan.markers, ink: scan.ink, guide: scan.guide, visible: scan.cells.length, total: scan.visible.length, ms, cells }))
+console.log(file, 'ok', scan.page.id, 'markers', scan.markers.join(''), 'visible', `${scan.cells.length}/${scan.visible.length}`, 'empty', cells.filter((c) => c.empty).length, 'ink', scan.ink.toFixed(2), 'guide', scan.guide.toFixed(2), `${ms}ms`)
