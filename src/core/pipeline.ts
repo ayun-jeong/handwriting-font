@@ -40,6 +40,8 @@ export type PageScan =
        * darker than this; scan apps' "document" clean-up can make the light-blue guides nearly as dark as a pen.
        */
       guide: number
+      /** A black-and-white (1-bit) scan: the guides came out as black as the ink, or vanished. */
+      binary: boolean
     }
   | { ok: false; reason: 'markers' | 'qr' | 'page'; markers: number[]; qr?: string }
 
@@ -254,6 +256,19 @@ function registerCells(cv: CV, src: CV, H: M3, bg: Bg, lay: Layout, cells: numbe
   return out
 }
 
+/**
+ * Black-and-white (1-bit) scan: nearly every pixel is pure black or pure white. The light-blue guides either
+ * vanish or turn as black as the ink there, so such scans can't be read reliably.
+ */
+function isBlackAndWhite(gray: Uint8Array): boolean {
+  let extreme = 0, n = 0
+  for (let i = 0; i < gray.length; i += 7) {
+    n++
+    if (gray[i] < 24 || gray[i] > 231) extreme++
+  }
+  return extreme > 0.985 * n
+}
+
 /** Share of the work done, 0..1 (reading cells is about the first 30%, tracing them the rest). */
 export type Progress = (done: number) => void
 
@@ -330,6 +345,7 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
     })
     const shown = visible.flatMap((v, i) => (v ? [i] : []))
     const offsets = registerCells(cv, src, H, bg, lay, shown)
+    const binary = isBlackAndWhite(new Uint8Array(gray.data))
     progress?.(0.1)
     const cellPx = median(shown.map((i) => {
       const [x, y] = lay.slots[i]
@@ -368,7 +384,7 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
       return { index, char, kind, crop }
     })
     const blurPx = edgeBlur(new Uint8Array(gray.data), gray.cols, gray.rows, quads)
-    return { ok: true, page, markers, ink, cells, visible, overview, cellPx, blurPx, guide }
+    return { ok: true, page, markers, ink, cells, visible, overview, cellPx, blurPx, guide, binary }
   } finally {
     for (const m of mats) m.delete?.()
   }

@@ -22,8 +22,8 @@ export type EngineResponse =
       visible: number; total: number; seen: number[]
       /** Photo pixels across one cell, and the photo's blur (Gaussian sigma) in photo pixels. */
       cellPx: number; blurPx: number
-      /** How dark the printed guides came out (0..1). */
-      guide: number
+      /** How dark the printed guides came out (0..1), and whether this is a black-and-white (1-bit) scan. */
+      guide: number; binary: boolean
     }
   | { t: 'retraced'; id: number; items: { key: string; outlines: Outline[] }[] }
   /** `w`×`w` mask (0 / 255) over the crop, or null when the scanner found no ink. */

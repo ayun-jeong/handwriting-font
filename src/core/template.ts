@@ -9,13 +9,13 @@ import { KIND, LAYOUTS, MARK, MID_QR_SIZE, MID_QR_X, MID_QR_Y, MID_Y, MM, PAGE_H
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // The box border is the darkest guide: the scanner finds the cells by it and measures how dark the guides came out.
-const GUIDE = 'rgb(110,185,235)'
+const GUIDE = 'rgb(160,206,240)'
 // Everything printed inside a cell is lighter, so that scan apps' contrast boost doesn't turn it into ink.
-const BASELINE = 'rgb(150,205,240)'
-const GUIDE_LIGHT = 'rgb(188,224,246)'
+const BASELINE = 'rgb(178,218,245)'
+const GUIDE_LIGHT = 'rgb(200,229,248)'
 // Trace guides for jamo cells: the part to write, and the rest of the syllable for context.
-const TRACE = 'rgb(176,218,245)'
-const CONTEXT = 'rgb(232,243,251)'
+const TRACE = 'rgb(184,222,246)'
+const CONTEXT = 'rgb(236,245,252)'
 const FONT = '"Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif'
 
 function dashed(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, width: number, dash: number) {

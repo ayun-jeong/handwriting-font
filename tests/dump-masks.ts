@@ -40,4 +40,4 @@ const cells = scan.cells.map((c, n) => {
 })
 fs.writeFileSync(out + '.bin', bin)
 fs.writeFileSync(out + '.json', JSON.stringify({ ok: true, page: scan.page.id, markers: scan.markers, ink: scan.ink, guide: scan.guide, visible: scan.cells.length, total: scan.visible.length, ms, cells }))
-console.log(file, 'ok', scan.page.id, 'markers', scan.markers.join(''), 'visible', `${scan.cells.length}/${scan.visible.length}`, 'empty', cells.filter((c) => c.empty).length, 'ink', scan.ink.toFixed(2), 'guide', scan.guide.toFixed(2), `${ms}ms`)
+console.log(file, 'ok', scan.page.id, 'markers', scan.markers.join(''), 'visible', `${scan.cells.length}/${scan.visible.length}`, 'empty', cells.filter((c) => c.empty).length, 'ink', scan.ink.toFixed(2), 'guide', scan.guide.toFixed(2), 'binary', scan.binary, `${ms}ms`)

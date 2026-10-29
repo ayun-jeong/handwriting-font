@@ -88,7 +88,7 @@ self.onmessage = async (e: MessageEvent<EngineRequest>) => {
         t: 'scanned', id: msg.id, ok: true,
         page: { id: scan.page.id, title: scan.page.title, layout: scan.page.layout },
         ink: scan.ink, glyphs: out, empties: empties.map((c) => c.char), check,
-        visible: scan.cells.length, total: scan.visible.length, seen: scan.cells.map((c) => c.index), cellPx: Math.round(scan.cellPx), blurPx: Math.round(scan.blurPx * 100) / 100, guide: Math.round(scan.guide * 100) / 100,
+        visible: scan.cells.length, total: scan.visible.length, seen: scan.cells.map((c) => c.index), cellPx: Math.round(scan.cellPx), blurPx: Math.round(scan.blurPx * 100) / 100, guide: Math.round(scan.guide * 100) / 100, binary: scan.binary,
       }, out.map((g) => g.crop.buffer as ArrayBuffer))
       return
     }
