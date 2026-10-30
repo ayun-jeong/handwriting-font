@@ -186,7 +186,7 @@ export default function PhotosStep({ photos, setPhotos, update, weight, counts, 
                       </div>
                     )}
                     {(p.binary || (p.guide !== undefined && p.guide >= GUIDE_LIKE_INK)) && (
-                      <div className="hint warn">흑백으로 스캔된 것 같아요. 흑백에서는 하늘색 안내선이 글씨처럼 까매지거나 칸 테두리가 사라져서 글자를 제대로 못 읽어요. 컬러나 회색조로 다시 스캔해 주세요.</div>
+                      <div className="hint warn">흑백으로 스캔된 것 같아요. 흑백에서는 획 가장자리가 거칠어지고, 예전 템플릿이라면 안내선이 글씨에 섞일 수 있어요. 결과가 마음에 안 들면 컬러나 회색조로 다시 스캔해 주세요.</div>
                     )}
                     {p.pageCells !== undefined && p.total !== undefined && p.total < p.pageCells && (() => {
                       const missing = p.pageCells - (covered.get(p.pageId!)?.size ?? p.total)
