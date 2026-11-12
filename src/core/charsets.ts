@@ -18,8 +18,9 @@ export const KOREAN_PAGES = Math.floor(syllables.ranked.length / SET_SIZE)
 
 const LATIN = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', ...'.,!?\'"-()&:;/@#%+*']
 
-// Frequently used symbols. Full-width ones (chat jamo, hearts, arrows, CJK brackets) sit in the em box like
-// Hangul; the rest sit on the baseline like Latin.
+// Frequently used symbols. Full-width ones (chat jamo, hearts, circles, arrows, CJK brackets) sit in the em box
+// like Hangul; the rest sit on the baseline like Latin. New symbols go at the end: a printed template's QR names
+// only the page, and its cells are read in this order.
 const SYMBOLS: [string, Kind][] = [
   ...[...'ㅋㅎㅠㅜㅡㅇㄱㄴㄷㅂㅅㅈㅊ'].map((c): [string, Kind] => [c, 'hangul']),
   ...[...'♥♡★☆♪♬○●◎△▲□■◇◆※✓✗'].map((c): [string, Kind] => [c, 'hangul']),
@@ -28,7 +29,11 @@ const SYMBOLS: [string, Kind][] = [
   ...[...'±×÷≠≤≥∞°℃₩€¥£'].map((c): [string, Kind] => [c, 'latin']),
   ...[...'·…‘’“”'].map((c): [string, Kind] => [c, 'latin']),
   ...[...'「」『』《》〈〉'].map((c): [string, Kind] => [c, 'hangul']),
+  ...[...'⊕⊖'].map((c): [string, Kind] => [c, 'hangul']),
 ]
+export const SYMBOL_COUNT = SYMBOLS.length
+/** 크게 pages hold 80 cells, so the symbols take more than one there (HF1|Y, HF1|Y2, ...). */
+const SYMBOL_PAGES = Math.ceil(SYMBOLS.length / SET_SIZE)
 
 // Pages of the first printed test template (spike-v1), still accepted so those printouts keep working.
 const SPIKE_KOREAN = [...'다람쥐헌쳇바퀴에타고파키스의유조건은입술끼리만나야하특별한기필요치않손글씨로든꼴오늘도좋루되세안녕반갑습니이는을가지서사자어수아해대일정시인있적과보것국상전들장']
@@ -39,8 +44,9 @@ export function latinPage(): PageDef {
   return page('HF1|L', '영문·숫자·기호', LATIN, 'latin')
 }
 
-export function symbolPage(): PageDef {
-  return { id: 'HF1|Y', layout: 'L', title: '특수문자', chars: SYMBOLS.map((x) => x[0]), kinds: SYMBOLS.map((x) => x[1]) }
+export function symbolPage(n: number): PageDef {
+  const part = SYMBOLS.slice((n - 1) * SET_SIZE, n * SET_SIZE)
+  return { id: n === 1 ? 'HF1|Y' : `HF1|Y${n}`, layout: 'L', title: `특수문자 ${n}`, chars: part.map((x) => x[0]), kinds: part.map((x) => x[1]) }
 }
 
 /** Jamo pages: 1 = syllables without a final consonant, 2 = with a final consonant and the finals. */
@@ -100,7 +106,7 @@ export function templatePages(layout: LayoutId, p: Parts): PageDef[] {
     if (p.jamo) out.push(jamoPage(1), jamoPage(2))
     for (let n = p.from; p.to > 0 && n <= p.to; n++) out.push(koreanPage(n))
     if (p.latin) out.push(latinPage())
-    if (p.symbols) out.push(symbolPage())
+    if (p.symbols) for (let n = 1; n <= SYMBOL_PAGES; n++) out.push(symbolPage(n))
     return out
   }
   const { chars, kinds } = partsCells(p)
@@ -115,12 +121,15 @@ export function templatePages(layout: LayoutId, p: Parts): PageDef[] {
 
 export function pageFromQr(text: string): PageDef | null {
   const t = text.trim()
-  const m = /^HF1\|(L|Y|J([12])|K(\d{1,2}))$/.exec(t)
+  const m = /^HF1\|(L|Y(\d)?|J([12])|K(\d{1,2}))$/.exec(t)
   if (m) {
     if (m[1] === 'L') return latinPage()
-    if (m[1] === 'Y') return symbolPage()
-    if (m[2]) return jamoPage(Number(m[2]) as 1 | 2)
-    const n = Number(m[3])
+    if (m[1][0] === 'Y') {
+      const n = Number(m[2] ?? 1)
+      return n >= 1 && n <= SYMBOL_PAGES ? symbolPage(n) : null
+    }
+    if (m[3]) return jamoPage(Number(m[3]) as 1 | 2)
+    const n = Number(m[4])
     return n >= 1 && n <= KOREAN_PAGES ? koreanPage(n) : null
   }
   const dense = /^HF2\|([MS])\|([A-Z0-9.-]+)\|(\d{1,2})$/.exec(t)

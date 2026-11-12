@@ -1,4 +1,4 @@
-// E2E part 1: open the built site, download a 5-page large-cell template PDF (jamo 1-2, Korean 1, Latin, symbols).
+// E2E part 1: open the built site, download a 6-page large-cell template PDF (jamo 1-2, Korean 1, Latin, symbols 1-2).
 import fs from 'node:fs'
 import path from 'node:path'
 import puppeteer from 'puppeteer-core'

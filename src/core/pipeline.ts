@@ -258,15 +258,23 @@ function registerCells(cv: CV, src: CV, H: M3, bg: Bg, lay: Layout, cells: numbe
 
 /**
  * Black-and-white (1-bit) scan: nearly every pixel is pure black or pure white. The light-blue guides either
- * vanish or turn as black as the ink there, so such scans can't be read reliably.
+ * vanish or turn as black as the ink there, so such scans can't be read reliably. Only the photo pixels around
+ * the cells count: a page with few cells is mostly blank paper, which is pure white in any clean scan or PDF.
  */
-function isBlackAndWhite(gray: Uint8Array): boolean {
+function isBlackAndWhite(gray: CV, Hinv: M3, lay: Layout, cells: number[]): boolean {
+  if (!cells.length) return false
+  const xs = cells.map((i) => lay.slots[i][0]), ys = cells.map((i) => lay.slots[i][1])
+  const [l, t, r, b] = [Math.min(...xs), Math.min(...ys), Math.max(...xs) + lay.box, Math.max(...ys) + lay.box]
+  const area = ([[l, t], [r, t], [r, b], [l, b]] as Pt[]).map((p) => apply(Hinv, p))
+  const x0 = Math.max(0, Math.floor(Math.min(...area.map((p) => p[0])))), x1 = Math.min(gray.cols, Math.ceil(Math.max(...area.map((p) => p[0]))))
+  const y0 = Math.max(0, Math.floor(Math.min(...area.map((p) => p[1])))), y1 = Math.min(gray.rows, Math.ceil(Math.max(...area.map((p) => p[1]))))
+  const g: Uint8Array = gray.data
   let extreme = 0, n = 0
-  for (let i = 0; i < gray.length; i += 7) {
+  for (let y = y0; y < y1; y += 2) for (let x = x0 + (y % 7); x < x1; x += 7) {
     n++
-    if (gray[i] < 24 || gray[i] > 231) extreme++
+    if (g[y * gray.cols + x] < 24 || g[y * gray.cols + x] > 231) extreme++
   }
-  return extreme > 0.985 * n
+  return n > 0 && extreme > 0.985 * n
 }
 
 /** Share of the work done, 0..1 (reading cells is about the first 30%, tracing them the rest). */
@@ -345,7 +353,7 @@ export function scanPage(cv: CV, img: RGBAImage, progress?: Progress): PageScan 
     })
     const shown = visible.flatMap((v, i) => (v ? [i] : []))
     const offsets = registerCells(cv, src, H, bg, lay, shown)
-    const binary = isBlackAndWhite(new Uint8Array(gray.data))
+    const binary = isBlackAndWhite(gray, Hinv, lay, shown)
     progress?.(0.1)
     const cellPx = median(shown.map((i) => {
       const [x, y] = lay.slots[i]

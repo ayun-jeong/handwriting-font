@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FREQUENCY_SOURCE, KOREAN_PAGES, PRESETS, SET_SIZE, koreanCoverage, partsCells, templatePages, type Parts, type Preset } from '../core/charsets.ts'
+import { FREQUENCY_SOURCE, KOREAN_PAGES, PRESETS, SET_SIZE, SYMBOL_COUNT, koreanCoverage, partsCells, templatePages, type Parts, type Preset } from '../core/charsets.ts'
 import { LAYOUTS, PAGE_H, PAGE_W, type LayoutId } from '../core/geometry.ts'
 import { drawTemplatePage, templatePdf } from '../core/template.ts'
 import { download } from './download.ts'
@@ -129,7 +129,7 @@ export default function TemplateStep({ onNext }: { onNext: () => void }) {
               </label>
               <label className="check">
                 <input id="opt-symbols" type="checkbox" checked={parts.symbols} onChange={(e) => set({ symbols: e.target.checked })} />
-                <span><b>특수문자</b> 80칸 · ♥ ★ → ㅋㅋ ㅠㅠ 「」 ₩ ℃ 등</span>
+                <span><b>특수문자</b> {SYMBOL_COUNT}칸 · ♥ ★ → ㅋㅋ ㅠㅠ 「」 ₩ ℃ ⊕ ⊖ 등</span>
               </label>
             </>
           ) : (
@@ -137,7 +137,7 @@ export default function TemplateStep({ onNext }: { onNext: () => void }) {
               <li><b>자모</b> 157칸. 하늘색으로 진한 부분만 따라 써요.</li>
               {parts.to > 0 && <li><b>자주 쓰는 한글</b> {koreanCount}자</li>}
               <li><b>영문·숫자·기호</b> 80칸</li>
-              <li><b>특수문자</b> 80칸 · ♥ ★ → ㅋㅋ ㅠㅠ 「」 ₩ ℃ 등</li>
+              <li><b>특수문자</b> {SYMBOL_COUNT}칸 · ♥ ★ → ㅋㅋ ㅠㅠ 「」 ₩ ℃ ⊕ ⊖ 등</li>
             </ul>
           )}
           <p className="hint">
